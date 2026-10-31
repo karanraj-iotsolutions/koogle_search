@@ -186,6 +186,33 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'share', label: 'Share' },
 ];
 
+function getPermanentlyDeletedIds() {
+  try {
+    const raw = localStorage.getItem('koogle_permanently_deleted_ids');
+    return new Set(raw ? JSON.parse(raw) : []);
+  } catch (e) {
+    return new Set();
+  }
+}
+
+function savePermanentlyDeletedIds(idList) {
+  try {
+    const current = getPermanentlyDeletedIds();
+    idList.forEach((id) => current.add(id));
+    localStorage.setItem('koogle_permanently_deleted_ids', JSON.stringify(Array.from(current)));
+  } catch (e) {}
+}
+
+function getRecycledIds() {
+  try {
+    const raw = localStorage.getItem('koogle_recycle_bin');
+    const list = raw ? JSON.parse(raw) : [];
+    return new Set(list.map((d) => d.id));
+  } catch (e) {
+    return new Set();
+  }
+}
+
 export default function DashboardPage({
   user = 'admin',
   role = 'super_admin',
@@ -203,14 +230,9 @@ export default function DashboardPage({
   });
   const [showRecycleModal, setShowRecycleModal] = useState(false);
   const [documents, setDocuments] = useState(() => {
-    try {
-      const cachedRecycled = localStorage.getItem('koogle_recycle_bin');
-      const recycled = cachedRecycled ? JSON.parse(cachedRecycled) : [];
-      const recycledIds = new Set(recycled.map((d) => d.id));
-      return DEFAULT_DOCUMENTS.filter((d) => !recycledIds.has(d.id));
-    } catch (e) {
-      return DEFAULT_DOCUMENTS;
-    }
+    const permDeleted = getPermanentlyDeletedIds();
+    const recycled = getRecycledIds();
+    return DEFAULT_DOCUMENTS.filter((d) => !permDeleted.has(d.id) && !recycled.has(d.id));
   });
   const [backendConnected, setBackendConnected] = useState(false);
 
@@ -307,16 +329,15 @@ export default function DashboardPage({
     try {
       const items = await getDocuments();
       if (Array.isArray(items)) {
-        const cachedRecycled = localStorage.getItem('koogle_recycle_bin');
-        const recycled = cachedRecycled ? JSON.parse(cachedRecycled) : [];
-        const recycledIds = new Set(recycled.map((d) => d.id));
+        const permDeleted = getPermanentlyDeletedIds();
+        const recycled = getRecycledIds();
 
         if (items.length > 0) {
-          const activeItems = items.filter((d) => !recycledIds.has(d.id));
+          const activeItems = items.filter((d) => !permDeleted.has(d.id) && !recycled.has(d.id));
           setDocuments(activeItems);
           indexDocuments(activeItems);
         } else {
-          const activeMock = DEFAULT_DOCUMENTS.filter((d) => !recycledIds.has(d.id));
+          const activeMock = DEFAULT_DOCUMENTS.filter((d) => !permDeleted.has(d.id) && !recycled.has(d.id));
           setDocuments(activeMock);
         }
       }
@@ -552,6 +573,15 @@ export default function DashboardPage({
 
   // Document: Restore from Recycle Bin back to Dashboard
   const handleRestore = (doc) => {
+    // If it was in permanently deleted list, remove it
+    try {
+      const permDeleted = getPermanentlyDeletedIds();
+      if (permDeleted.has(doc.id)) {
+        permDeleted.delete(doc.id);
+        localStorage.setItem('koogle_permanently_deleted_ids', JSON.stringify(Array.from(permDeleted)));
+      }
+    } catch (e) {}
+
     // Remove from Recycle Bin
     setRecycleBin((prev) => {
       const updated = prev.filter((d) => d.id !== doc.id);
@@ -577,6 +607,9 @@ export default function DashboardPage({
       return;
     }
 
+    // Permanently record ID as erased so it NEVER returns to the dashboard
+    savePermanentlyDeletedIds([doc.id]);
+
     // Remove from Recycle Bin
     setRecycleBin((prev) => {
       const updated = prev.filter((d) => d.id !== doc.id);
@@ -587,6 +620,9 @@ export default function DashboardPage({
       }
       return updated;
     });
+
+    // Also remove from active documents if present
+    setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
 
     // If real file, delete from S3 and DynamoDB
     if (doc.s3Key) {
@@ -610,10 +646,17 @@ export default function DashboardPage({
     }
 
     const itemsToDelete = [...recycleBin];
+    // Record all IDs as permanently deleted so they NEVER return
+    savePermanentlyDeletedIds(itemsToDelete.map((d) => d.id));
+
     setRecycleBin([]);
     try {
       localStorage.removeItem('koogle_recycle_bin');
     } catch (e) {}
+
+    // Ensure documents state doesn't have any of them
+    const idsSet = new Set(itemsToDelete.map((d) => d.id));
+    setDocuments((prev) => prev.filter((d) => !idsSet.has(d.id)));
 
     for (const d of itemsToDelete) {
       if (d.s3Key) {
