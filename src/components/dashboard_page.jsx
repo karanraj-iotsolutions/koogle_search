@@ -191,9 +191,11 @@ export default function DashboardPage({
   const loadBackendDocuments = async () => {
     try {
       const items = await getDocuments();
-      if (Array.isArray(items) && items.length > 0) {
+      if (Array.isArray(items)) {
         setDocuments(items);
-        indexDocuments(items);
+        if (items.length > 0) {
+          indexDocuments(items);
+        }
       }
       setBackendConnected(true);
     } catch (err) {
@@ -1004,8 +1006,10 @@ export default function DashboardPage({
               <tbody>
                 {searchResults.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="empty-row">
-                      No documents found matching "{searchQuery}"
+                    <td colSpan="7" className="empty-row" style={{ textAlign: 'center', padding: '36px 16px', color: '#64748b' }}>
+                      {searchQuery.trim()
+                        ? `No documents found matching "${searchQuery}"`
+                        : 'No documents uploaded yet. Click "+ Upload Doc" in the top bar to add your circulars.'}
                     </td>
                   </tr>
                 ) : (
