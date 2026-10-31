@@ -139,6 +139,45 @@ const DEFAULT_DOCUMENTS = [
   },
 ];
 
+const SAMPLE_DOC_INDEX = {
+  'mock-1': {
+    fullText: 'MINISTRY OF FINANCE - OFFICIAL CIRCULAR\nCircular No: CIR/2026/FIN-104\nDate: 2026-10-14\nSubject: Quarterly Financial Statement Guidelines\nRemarks: Mandatory filing by end of Q3\nThis document outlines official circular guidelines and statutory directives.\nAll personnel and departments must maintain full compliance with these standards.\nDocument verified and registered in Koogle DocPortal archive.\nKey Content: financial statement balance sheet revenue audit compliance filing q3 report accounting tax expenditure fiscal year.',
+    pages: [
+      {
+        pageNum: 1,
+        text: 'MINISTRY OF FINANCE - OFFICIAL CIRCULAR Circular No: CIR/2026/FIN-104 Date: 2026-10-14 Subject: Quarterly Financial Statement Guidelines Remarks: Mandatory filing by end of Q3 This document outlines official circular guidelines and statutory directives. All personnel and departments must maintain full compliance with these standards. Document verified and registered in Koogle DocPortal archive. Key Content: financial statement balance sheet revenue audit compliance filing q3 report accounting tax expenditure fiscal year.',
+      },
+    ],
+  },
+  'mock-2': {
+    fullText: 'RESERVE AUTHORITY - OFFICIAL CIRCULAR\nCircular No: RA/2026-27/88\nDate: 2026-10-13\nSubject: Vendor Partnership & Cloud Security Agreement\nRemarks: Signed service level contract\nThis document outlines official circular guidelines and statutory directives.\nAll personnel and departments must maintain full compliance with these standards.\nDocument verified and registered in Koogle DocPortal archive.\nTerms: cloud security vendor partnership agreement contract cyber privacy encryption sla data protection service level hosting infrastructure.',
+    pages: [
+      {
+        pageNum: 1,
+        text: 'RESERVE AUTHORITY - OFFICIAL CIRCULAR Circular No: RA/2026-27/88 Date: 2026-10-13 Subject: Vendor Partnership & Cloud Security Agreement Remarks: Signed service level contract This document outlines official circular guidelines and statutory directives. All personnel and departments must maintain full compliance with these standards. Document verified and registered in Koogle DocPortal archive. Terms: cloud security vendor partnership agreement contract cyber privacy encryption sla data protection service level hosting infrastructure.',
+      },
+    ],
+  },
+  'mock-3': {
+    fullText: 'DEPT. OF PRODUCT & IT - OFFICIAL CIRCULAR\nCircular No: IT-PR-412/A\nDate: 2026-10-12\nSubject: Product Roadmap & Release Scope 2026\nRemarks: Sprint priorities for mobile release\nThis document outlines official circular guidelines and statutory directives.\nAll personnel and departments must maintain full compliance with these standards.\nDocument verified and registered in Koogle DocPortal archive.\nDirectives: product roadmap release scope mobile sprint engineering agile milestone architecture backlog feature devops continuous integration.',
+    pages: [
+      {
+        pageNum: 1,
+        text: 'DEPT. OF PRODUCT & IT - OFFICIAL CIRCULAR Circular No: IT-PR-412/A Date: 2026-10-12 Subject: Product Roadmap & Release Scope 2026 Remarks: Sprint priorities for mobile release This document outlines official circular guidelines and statutory directives. All personnel and departments must maintain full compliance with these standards. Document verified and registered in Koogle DocPortal archive. Directives: product roadmap release scope mobile sprint engineering agile milestone architecture backlog feature devops continuous integration.',
+      },
+    ],
+  },
+  'mock-4': {
+    fullText: 'HUMAN RESOURCES DIRECTORATE - OFFICIAL CIRCULAR\nCircular No: HR/CIR-09/2026\nDate: 2026-10-10\nSubject: Employee Policy Handbook v4.2\nRemarks: Updated remote work & benefits\nThis document outlines official circular guidelines and statutory directives.\nAll personnel and departments must maintain full compliance with these standards.\nDocument verified and registered in Koogle DocPortal archive.\nPolicies: employee policy handbook remote work benefits human resources hr staff leave conduct insurance medical allowance vacation ethics regulations.',
+    pages: [
+      {
+        pageNum: 1,
+        text: 'HUMAN RESOURCES DIRECTORATE - OFFICIAL CIRCULAR Circular No: HR/CIR-09/2026 Date: 2026-10-10 Subject: Employee Policy Handbook v4.2 Remarks: Updated remote work & benefits This document outlines official circular guidelines and statutory directives. All personnel and departments must maintain full compliance with these standards. Document verified and registered in Koogle DocPortal archive. Policies: employee policy handbook remote work benefits human resources hr staff leave conduct insurance medical allowance vacation ethics regulations.',
+      },
+    ],
+  },
+};
+
 const AVAILABLE_PERMISSIONS = [
   { id: 'upload', label: 'Upload' },
   { id: 'edit', label: 'Edit' },
@@ -185,7 +224,7 @@ export default function DashboardPage({
   const [currentMatchIdx, setCurrentMatchIdx] = useState(0);
   const [pdfSearching, setPdfSearching] = useState(false);
   const [pdfSearchMessage, setPdfSearchMessage] = useState('');
-  const [docIndexMap, setDocIndexMap] = useState({});
+  const [docIndexMap, setDocIndexMap] = useState(SAMPLE_DOC_INDEX);
   const [pdfViewerMode, setPdfViewerMode] = useState('highlight');
 
   // New Document state
@@ -219,7 +258,13 @@ export default function DashboardPage({
 
   // Background full-text indexing for all documents
   const indexDocuments = async (docs) => {
+    if (!Array.isArray(docs)) return;
     for (const d of docs) {
+      if (!d) continue;
+      if (SAMPLE_DOC_INDEX[d.id]) {
+        setDocIndexMap((prev) => ({ ...prev, [d.id]: SAMPLE_DOC_INDEX[d.id] }));
+        continue;
+      }
       if (!d.s3Key) continue;
       getCachedDocText(d.id).then((cached) => {
         if (cached) {
@@ -407,6 +452,7 @@ export default function DashboardPage({
       }
 
       setDocuments((prev) => [...newlyCreatedDocs, ...prev]);
+      indexDocuments(newlyCreatedDocs);
       setShowUploadModal(false);
       resetUploadForm();
       alert(`Successfully uploaded ${newlyCreatedDocs.length} document${newlyCreatedDocs.length > 1 ? 's' : ''}!`);
