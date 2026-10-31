@@ -386,23 +386,23 @@ export default function DashboardPage({
       return;
     }
 
-    if (selectedFiles.length === 0 && !newDoc.subject.trim()) {
-      alert('Please enter a Subject or attach at least one file.');
+    if (selectedFiles.length === 0) {
+      alert('Please select at least one document file (PDF, Word, Excel, etc.) to upload to AWS S3.');
       return;
     }
 
     setIsUploading(true);
 
     try {
-      const filesToUpload = selectedFiles.length > 0 ? selectedFiles : [null];
+      const filesToUpload = selectedFiles;
       const newlyCreatedDocs = [];
 
       for (let i = 0; i < filesToUpload.length; i++) {
         const file = filesToUpload[i];
         if (filesToUpload.length > 1) {
-          setUploadProgress(`Uploading ${i + 1} of ${filesToUpload.length}: ${file.name}...`);
+          setUploadProgress(`Uploading ${i + 1} of ${filesToUpload.length}: ${file.name} to AWS S3...`);
         } else {
-          setUploadProgress('Uploading to S3...');
+          setUploadProgress(`Uploading ${file.name} to AWS S3...`);
         }
 
         let docSubject = newDoc.subject.trim();
@@ -436,18 +436,11 @@ export default function DashboardPage({
           const created = await uploadDocument(formData);
           newlyCreatedDocs.push(created);
         } catch (err) {
-          console.warn('Backend upload notice, using local fallback:', err);
-          const localRecord = {
-            id: 'local-' + Date.now() + '-' + i,
-            date: newDoc.date,
-            issuer: newDoc.issuer,
-            circularNo: docCircularNo,
-            subject: docSubject,
-            remarks: newDoc.remarks || '-',
-            fileName: file ? file.name : 'Document.pdf',
-            s3Key: null,
-          };
-          newlyCreatedDocs.push(localRecord);
+          console.error('Backend S3 upload failed:', err);
+          alert(`Failed to upload ${file.name} to AWS S3: ` + (err.message || 'Server error'));
+          setIsUploading(false);
+          setUploadProgress('');
+          return;
         }
       }
 
@@ -455,7 +448,7 @@ export default function DashboardPage({
       indexDocuments(newlyCreatedDocs);
       setShowUploadModal(false);
       resetUploadForm();
-      alert(`Successfully uploaded ${newlyCreatedDocs.length} document${newlyCreatedDocs.length > 1 ? 's' : ''}!`);
+      alert(`Successfully uploaded ${newlyCreatedDocs.length} document${newlyCreatedDocs.length > 1 ? 's' : ''} to AWS S3!`);
     } catch (err) {
       console.error('Batch Upload Error:', err);
       alert('Upload failed: ' + (err.message || 'Unknown error'));
@@ -1431,14 +1424,16 @@ export default function DashboardPage({
 
               <div className="modal-field">
                 <label>
-                  Attach Files (S3){' '}
+                  Attach Files to Upload to AWS S3{' '}
                   <span style={{ fontSize: '9pt', color: '#2563eb', fontWeight: 'normal' }}>
-                    • Select multiple files supported (PDF, Word, Excel, Images, Text)
+                    (PDF, Word, Excel, Images, Text - Multi-file supported)
                   </span>
+                  <span style={{ color: '#dc2626', fontWeight: 'bold', marginLeft: '4px' }}>*</span>
                 </label>
                 <input
                   type="file"
                   multiple
+                  required
                   onChange={(e) => {
                     const files = Array.from(e.target.files || []);
                     setSelectedFiles(files);
@@ -1508,10 +1503,10 @@ export default function DashboardPage({
                   disabled={isUploading}
                 >
                   {isUploading
-                    ? uploadProgress || 'Uploading to S3...'
+                    ? uploadProgress || 'Uploading to AWS S3...'
                     : selectedFiles.length > 1
-                    ? `Upload ${selectedFiles.length} Documents`
-                    : 'Save Document'}
+                    ? `Upload ${selectedFiles.length} Documents to AWS S3 ⬆`
+                    : 'Upload Document to AWS S3 ⬆'}
                 </button>
               </div>
             </form>
