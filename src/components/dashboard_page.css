@@ -277,15 +277,15 @@
 }
 
 /* =========================================
-   Matching Row Highlight with Royal Blue Outline
+   Matching Row Highlight with Royal Blue Outline (Outline Only, No Fill)
    ========================================= */
 .doc-table tbody tr.search-matched-row {
-  background-color: #f0f7ff !important;
+  background-color: transparent !important;
   transition: all 0.2s ease;
 }
 
 .doc-table tbody tr.search-matched-row td {
-  background-color: #f0f7ff !important;
+  background-color: #ffffff !important;
   border-top: 2px solid #2563eb !important;
   border-bottom: 2px solid #2563eb !important;
 }
@@ -303,7 +303,7 @@
 }
 
 .doc-table tbody tr.search-matched-row:hover td {
-  background-color: #e0f2fe !important;
+  background-color: #fafafa !important;
 }
 
 /* In-Cell Keyword Highlight Tag */
