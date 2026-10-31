@@ -837,9 +837,7 @@ export default function DashboardPage({
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
               <circle cx="12" cy="7" r="4" />
             </svg>
-            <span>
-              {user} {isSuperAdmin ? '★ Super Admin' : role === 'admin' ? '(Admin)' : ''}
-            </span>
+            <span>{user}</span>
             {isAdmin && <span className="settings-indicator">⚙️</span>}
           </button>
 
