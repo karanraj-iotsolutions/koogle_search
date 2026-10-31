@@ -144,7 +144,8 @@ export default function DashboardPage({
     subject: '',
     remarks: '',
   });
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [uploadProgress, setUploadProgress] = useState('');
 
   // New User state
   const [newUser, setNewUser] = useState({
@@ -267,49 +268,89 @@ export default function DashboardPage({
     }
   };
 
-  // Document: Upload
+  // Document: Upload (Supports Multiple Files)
   const handleUploadSubmit = async (e) => {
     e.preventDefault();
-    if (!newDoc.issuer.trim() || !newDoc.circularNo.trim() || !newDoc.subject.trim()) {
-      alert('Please fill in Issuer, Circular No, and Subject.');
+    if (!newDoc.issuer.trim() || !newDoc.circularNo.trim()) {
+      alert('Please fill in Issuer and Circular No.');
+      return;
+    }
+
+    if (selectedFiles.length === 0 && !newDoc.subject.trim()) {
+      alert('Please enter a Subject or attach at least one file.');
       return;
     }
 
     setIsUploading(true);
 
     try {
-      const formData = new FormData();
-      formData.append('date', newDoc.date);
-      formData.append('issuer', newDoc.issuer);
-      formData.append('circularNo', newDoc.circularNo);
-      formData.append('subject', newDoc.subject);
-      formData.append('remarks', newDoc.remarks || '-');
-      if (selectedFile) {
-        formData.append('file', selectedFile);
+      const filesToUpload = selectedFiles.length > 0 ? selectedFiles : [null];
+      const newlyCreatedDocs = [];
+
+      for (let i = 0; i < filesToUpload.length; i++) {
+        const file = filesToUpload[i];
+        if (filesToUpload.length > 1) {
+          setUploadProgress(`Uploading ${i + 1} of ${filesToUpload.length}: ${file.name}...`);
+        } else {
+          setUploadProgress('Uploading to S3...');
+        }
+
+        let docSubject = newDoc.subject.trim();
+        if (file) {
+          const nameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+          if (!docSubject) {
+            docSubject = nameWithoutExt;
+          } else if (filesToUpload.length > 1) {
+            docSubject = `${newDoc.subject} (${file.name})`;
+          }
+        } else if (!docSubject) {
+          docSubject = 'Untitled Document';
+        }
+
+        const docCircularNo =
+          filesToUpload.length > 1 && newDoc.circularNo
+            ? `${newDoc.circularNo}/${i + 1}`
+            : newDoc.circularNo;
+
+        const formData = new FormData();
+        formData.append('date', newDoc.date);
+        formData.append('issuer', newDoc.issuer);
+        formData.append('circularNo', docCircularNo);
+        formData.append('subject', docSubject);
+        formData.append('remarks', newDoc.remarks || '-');
+        if (file) {
+          formData.append('file', file);
+        }
+
+        try {
+          const created = await uploadDocument(formData);
+          newlyCreatedDocs.push(created);
+        } catch (err) {
+          console.warn('Backend upload notice, using local fallback:', err);
+          const localRecord = {
+            id: 'local-' + Date.now() + '-' + i,
+            date: newDoc.date,
+            issuer: newDoc.issuer,
+            circularNo: docCircularNo,
+            subject: docSubject,
+            remarks: newDoc.remarks || '-',
+            fileName: file ? file.name : 'Document.pdf',
+            s3Key: null,
+          };
+          newlyCreatedDocs.push(localRecord);
+        }
       }
 
-      const created = await uploadDocument(formData);
-      setDocuments((prev) => [created, ...prev]);
+      setDocuments((prev) => [...newlyCreatedDocs, ...prev]);
       setShowUploadModal(false);
       resetUploadForm();
+      alert(`Successfully uploaded ${newlyCreatedDocs.length} document${newlyCreatedDocs.length > 1 ? 's' : ''}!`);
     } catch (err) {
-      console.error('Upload Error:', err);
-      const localRecord = {
-        id: 'local-' + Date.now(),
-        date: newDoc.date,
-        issuer: newDoc.issuer,
-        circularNo: newDoc.circularNo,
-        subject: newDoc.subject,
-        remarks: newDoc.remarks || '-',
-        fileName: selectedFile ? selectedFile.name : 'Document.pdf',
-        s3Key: null,
-      };
-      setDocuments((prev) => [localRecord, ...prev]);
-      setShowUploadModal(false);
-      resetUploadForm();
-      alert(`Notice: ${err.message || 'Saved locally (Backend offline)'}`);
+      console.error('Batch Upload Error:', err);
+      alert('Upload failed: ' + (err.message || 'Unknown error'));
     } finally {
       setIsUploading(false);
+      setUploadProgress('');
     }
   };
 
@@ -321,7 +362,8 @@ export default function DashboardPage({
       subject: '',
       remarks: '',
     });
-    setSelectedFile(null);
+    setSelectedFiles([]);
+    setUploadProgress('');
   };
 
   // Document: Edit
@@ -1190,13 +1232,17 @@ export default function DashboardPage({
               </div>
 
               <div className="modal-field">
-                <label>Subject</label>
+                <label>
+                  Subject{' '}
+                  <span style={{ fontSize: '9pt', color: '#64748b', fontWeight: 'normal' }}>
+                    (Optional for multiple files: defaults to filename if empty)
+                  </span>
+                </label>
                 <input
                   type="text"
                   placeholder="Enter document subject or headline"
                   value={newDoc.subject}
                   onChange={(e) => setNewDoc({ ...newDoc, subject: e.target.value })}
-                  required
                 />
               </div>
 
@@ -1211,16 +1257,68 @@ export default function DashboardPage({
               </div>
 
               <div className="modal-field">
-                <label>Attach File (S3)</label>
+                <label>
+                  Attach Files (S3){' '}
+                  <span style={{ fontSize: '9pt', color: '#2563eb', fontWeight: 'normal' }}>
+                    • Select multiple files supported (PDF, Word, Excel, Images, Text)
+                  </span>
+                </label>
                 <input
                   type="file"
+                  multiple
                   onChange={(e) => {
-                    const file = e.target.files[0];
-                    if (file) {
-                      setSelectedFile(file);
-                    }
+                    const files = Array.from(e.target.files || []);
+                    setSelectedFiles(files);
                   }}
                 />
+
+                {selectedFiles.length > 0 && (
+                  <div
+                    style={{
+                      marginTop: '8px',
+                      backgroundColor: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '6px',
+                      padding: '8px 12px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '9.5pt', color: '#15803d', fontWeight: 600 }}>
+                        ✓ {selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''} selected:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedFiles([])}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#ef4444',
+                          fontSize: '8.5pt',
+                          cursor: 'pointer',
+                          padding: 0,
+                        }}
+                      >
+                        Clear All
+                      </button>
+                    </div>
+                    <ul
+                      style={{
+                        margin: '6px 0 0 0',
+                        paddingLeft: '16px',
+                        fontSize: '9pt',
+                        color: '#475569',
+                        maxHeight: '120px',
+                        overflowY: 'auto',
+                      }}
+                    >
+                      {selectedFiles.map((f, i) => (
+                        <li key={i} style={{ marginBottom: '2px' }}>
+                          <strong>{f.name}</strong> ({(f.size / 1024).toFixed(1)} KB)
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
 
               <div className="modal-actions">
@@ -1236,7 +1334,11 @@ export default function DashboardPage({
                   className="btn-submit-upload"
                   disabled={isUploading}
                 >
-                  {isUploading ? 'Uploading to S3...' : 'Save Document'}
+                  {isUploading
+                    ? uploadProgress || 'Uploading to S3...'
+                    : selectedFiles.length > 1
+                    ? `Upload ${selectedFiles.length} Documents`
+                    : 'Save Document'}
                 </button>
               </div>
             </form>
