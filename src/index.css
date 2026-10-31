@@ -1,0 +1,21 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: 'Calibri', Candara, Segoe, 'Segoe UI', Arial, sans-serif !important;
+  font-weight: normal !important;
+}
+
+html, body {
+  background-color: #ffffff;
+  color: #111111;
+  font-family: 'Calibri', Candara, Segoe, 'Segoe UI', Arial, sans-serif !important;
+  font-size: 12pt;
+  font-weight: normal !important;
+  min-height: 100vh;
+}
+
+h1, h2, h3, h4, h5, h6, th, b, strong, button, input, select, textarea {
+  font-family: 'Calibri', Candara, Segoe, 'Segoe UI', Arial, sans-serif !important;
+  font-weight: normal !important;
+}

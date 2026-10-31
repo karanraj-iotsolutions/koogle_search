@@ -1,0 +1,477 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: 'Calibri', Candara, Segoe, 'Segoe UI', Arial, sans-serif !important;
+  font-size: 12pt;
+  font-weight: normal !important;
+}
+
+/* Page Background */
+.login-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #ffffff;
+  padding: 24px;
+}
+
+/* Card Container */
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 40px 36px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Document Icon Box */
+.header-icon-box {
+  width: 48px;
+  height: 48px;
+  background-color: #18181b;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  margin-bottom: 20px;
+}
+
+.doc-icon {
+  width: 22px;
+  height: 22px;
+}
+
+/* Typography */
+.login-title {
+  font-size: 15pt;
+  font-weight: normal !important;
+  color: #18181b;
+  margin-bottom: 6px;
+  text-align: center;
+}
+
+.login-subtitle {
+  font-size: 11pt;
+  font-weight: normal !important;
+  color: #71717a;
+  margin-bottom: 28px;
+  text-align: center;
+}
+
+/* Form */
+.login-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.input-group label {
+  font-weight: normal !important;
+  color: #374151;
+  font-size: 11.5pt;
+}
+
+.label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.forgot-pass-link {
+  font-size: 11pt;
+  color: #4b5563;
+  text-decoration: none;
+  font-weight: normal !important;
+}
+
+.forgot-pass-link:hover {
+  color: #18181b;
+  text-decoration: underline;
+}
+
+/* Input with icons */
+.input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.leading-icon {
+  position: absolute;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
+  pointer-events: none;
+}
+
+.leading-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.input-wrapper input {
+  width: 100%;
+  padding: 11px 40px 11px 38px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background-color: #ffffff;
+  color: #18181b;
+  font-size: 11.5pt;
+  font-weight: normal !important;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.input-wrapper input::placeholder {
+  color: #9ca3af;
+}
+
+.input-wrapper input:focus {
+  border-color: #18181b;
+  box-shadow: 0 0 0 1px #18181b;
+}
+
+.input-wrapper input.input-error {
+  border-color: #ef4444;
+}
+
+.eye-toggle-btn {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+}
+
+.eye-toggle-btn:hover {
+  color: #4b5563;
+}
+
+.eye-toggle-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.error-text {
+  font-size: 10pt;
+  color: #ef4444;
+  font-weight: normal !important;
+}
+
+/* Black Login Button */
+.login-button {
+  margin-top: 4px;
+  width: 100%;
+  padding: 12px;
+  background-color: #18b337;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-weight: normal !important;
+  font-size: 12pt;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.login-button:hover:not(:disabled) {
+  background-color: #27272a;
+}
+
+.login-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* Spinner */
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Forgot Password Link Button */
+.forgot-pass-link-btn {
+  background: none;
+  border: none;
+  font-size: 11pt;
+  color: #4b5563;
+  cursor: pointer;
+  padding: 0;
+  font-weight: normal !important;
+  text-decoration: none;
+}
+
+.forgot-pass-link-btn:hover {
+  color: #18181b;
+  text-decoration: underline;
+}
+
+/* Forgot Password Modal */
+.forgot-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.forgot-modal-card {
+  width: 100%;
+  max-width: 440px;
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 32px 30px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+}
+
+.forgot-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.forgot-header-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.forgot-title {
+  font-size: 14pt;
+  font-weight: normal !important;
+  color: #18181b;
+}
+
+.forgot-subtitle {
+  font-size: 11pt;
+  font-weight: normal !important;
+  color: #71717a;
+}
+
+.forgot-close-btn {
+  background: none;
+  border: none;
+  font-size: 14pt;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+}
+
+.forgot-close-btn:hover {
+  color: #18181b;
+}
+
+/* Stepper Indicator */
+.forgot-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  padding: 10px 14px;
+  background-color: #f9fafb;
+  border: 1px solid #f3f4f6;
+  border-radius: 8px;
+}
+
+.step-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #9ca3af;
+}
+
+.step-item.step-active {
+  color: #18181b;
+}
+
+.step-number {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background-color: #e5e7eb;
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10pt;
+}
+
+.step-item.step-active .step-number {
+  background-color: #18181b;
+  color: #ffffff;
+}
+
+.step-label {
+  font-size: 10.5pt;
+  font-weight: normal !important;
+}
+
+.step-divider {
+  flex: 1;
+  height: 1px;
+  background-color: #e5e7eb;
+  margin: 0 8px;
+}
+
+/* Status Banners */
+.forgot-error-banner {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  font-size: 10.5pt;
+  padding: 10px 14px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+}
+
+.forgot-success-banner {
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #16a34a;
+  font-size: 10.5pt;
+  padding: 10px 14px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+}
+
+.forgot-step-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* OTP Input */
+.otp-code-input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background-color: #ffffff;
+  color: #18181b;
+  font-size: 16pt;
+  letter-spacing: 8px;
+  text-align: center;
+  outline: none;
+  font-weight: normal !important;
+}
+
+.otp-code-input:focus {
+  border-color: #18181b;
+  box-shadow: 0 0 0 1px #18181b;
+}
+
+.otp-resend-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.otp-hint-text {
+  font-size: 10pt;
+  color: #6b7280;
+}
+
+.resend-otp-btn {
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-size: 10.5pt;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.resend-otp-btn:hover {
+  color: #1d4ed8;
+}
+
+.modal-buttons-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.modal-primary-btn {
+  flex: 1;
+  padding: 11px;
+  background-color: #18181b;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 11.5pt;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: background-color 0.15s ease;
+}
+
+.modal-primary-btn:hover:not(:disabled) {
+  background-color: #27272a;
+}
+
+.modal-primary-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.modal-secondary-btn {
+  padding: 11px 18px;
+  background-color: #ffffff;
+  color: #374151;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 11.5pt;
+  cursor: pointer;
+}
+
+.modal-secondary-btn:hover {
+  background-color: #f3f4f6;
+}
