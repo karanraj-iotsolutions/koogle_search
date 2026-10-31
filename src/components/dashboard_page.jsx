@@ -193,7 +193,15 @@ export default function DashboardPage({
   onLogout,
 }) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [documents, setDocuments] = useState(DEFAULT_DOCUMENTS);
+  const [documents, setDocuments] = useState(() => {
+    try {
+      const cached = localStorage.getItem('koogle_deleted_mock_ids');
+      const deleted = cached ? JSON.parse(cached) : [];
+      return DEFAULT_DOCUMENTS.filter((d) => !deleted.includes(d.id));
+    } catch (e) {
+      return DEFAULT_DOCUMENTS;
+    }
+  });
   const [backendConnected, setBackendConnected] = useState(false);
 
   // Modals
@@ -288,9 +296,16 @@ export default function DashboardPage({
   const loadBackendDocuments = async () => {
     try {
       const items = await getDocuments();
-      if (Array.isArray(items) && items.length > 0) {
-        setDocuments(items);
-        indexDocuments(items);
+      if (Array.isArray(items)) {
+        if (items.length > 0) {
+          setDocuments(items);
+          indexDocuments(items);
+        } else {
+          // If backend has 0 documents, respect deleted mock items
+          const cached = localStorage.getItem('koogle_deleted_mock_ids');
+          const deleted = cached ? JSON.parse(cached) : [];
+          setDocuments(DEFAULT_DOCUMENTS.filter((d) => !deleted.includes(d.id)));
+        }
       }
       setBackendConnected(true);
     } catch (err) {
@@ -511,11 +526,28 @@ export default function DashboardPage({
       return;
     }
 
-    try {
-      await deleteDocument(id, s3Key);
-      setDocuments((prev) => prev.filter((d) => d.id !== id));
-    } catch (err) {
-      setDocuments((prev) => prev.filter((d) => d.id !== id));
+    // Immediately remove from UI state
+    setDocuments((prev) => prev.filter((d) => d.id !== id));
+
+    // If it's a sample/mock item, persist deletion in localStorage so it never comes back
+    if (id && String(id).startsWith('mock-')) {
+      try {
+        const cached = localStorage.getItem('koogle_deleted_mock_ids');
+        const deleted = cached ? JSON.parse(cached) : [];
+        if (!deleted.includes(id)) {
+          deleted.push(id);
+          localStorage.setItem('koogle_deleted_mock_ids', JSON.stringify(deleted));
+        }
+      } catch (e) {
+        console.warn('localStorage error:', e);
+      }
+    } else {
+      // Real document in DynamoDB and AWS S3
+      try {
+        await deleteDocument(id, s3Key);
+      } catch (err) {
+        console.error('Failed to delete document from backend:', err);
+      }
     }
   };
 
