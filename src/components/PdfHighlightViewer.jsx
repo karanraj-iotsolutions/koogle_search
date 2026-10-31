@@ -38,11 +38,48 @@ function getSubstringOffsets(fullStr, startIdx, matchLen, totalWidth) {
   return { offsetLeft, matchWidth };
 }
 
+function escapeRegex(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function getQueryRegex(query) {
+  if (!query || !query.trim()) return null;
+  const words = query.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return null;
+  const pattern = words.map(escapeRegex).join('\\s+');
+  return new RegExp(pattern, 'gi');
+}
+
+function buildPageTextMap(items) {
+  let text = '';
+  const ranges = [];
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const str = item.str || '';
+    if (!str) continue;
+
+    const start = text.length;
+    text += str;
+    const end = text.length;
+
+    ranges.push({
+      item,
+      start,
+      end,
+    });
+
+    text += ' ';
+  }
+
+  return { text, ranges };
+}
+
 /**
  * PdfHighlightViewer.jsx
  * Chrome-Style Exact In-Document PDF Highlighter
- * Controlled entirely by the dashboard header search bar.
- * No duplicate search inputs. Yellow matches + vibrant sky-blue active match.
+ * Controlled entirely by dashboard header search bar.
+ * Matches full phrases accurately across consecutive PDF text fragments.
  */
 export default function PdfHighlightViewer({
   url,
@@ -58,7 +95,7 @@ export default function PdfHighlightViewer({
   const [currentPage, setCurrentPage] = useState(1);
   const [pagesData, setPagesData] = useState([]);
   const [allMatches, setAllMatches] = useState([]);
-  const [zoomScale, setZoomScale] = useState(1.35);
+  const [zoomScale, setZoomScale] = useState(1.45);
   const pdfDocRef = useRef(null);
   const renderTasksRef = useRef([]);
 
@@ -129,13 +166,13 @@ export default function PdfHighlightViewer({
     };
   }, [url]);
 
-  // 2. Scan and Index Matches across the entire document
+  // 2. Scan and Index Matches across the entire document using exact phrase regex
   useEffect(() => {
     let isCancelled = false;
 
     async function indexAllMatches() {
       const doc = pdfDocRef.current;
-      const cleanQuery = (searchKeyword || '').trim().toLowerCase();
+      const cleanQuery = (searchKeyword || '').trim();
 
       if (!doc || !cleanQuery) {
         setAllMatches([]);
@@ -147,10 +184,6 @@ export default function PdfHighlightViewer({
 
       const matchesList = [];
       let globalId = 0;
-
-      // Split query into individual words for fallback matching
-      const queryWords = cleanQuery.split(/\s+/).filter((w) => w.length >= 2);
-
       const maxPages = Math.min(doc.numPages, 150);
 
       for (let p = 1; p <= maxPages; p++) {
@@ -160,71 +193,24 @@ export default function PdfHighlightViewer({
           const page = await doc.getPage(p);
           const textContent = await page.getTextContent();
           const items = textContent.items || [];
+          const { text } = buildPageTextMap(items);
 
-          // Build full page text to try exact phrase match first
-          const fullPageText = items.map((it) => it.str || '').join(' ').toLowerCase();
-          let foundExact = false;
+          const queryRegex = getQueryRegex(cleanQuery);
+          if (!queryRegex) continue;
 
-          // A) Try exact phrase match across the full page text
-          let searchPos = 0;
-          while (searchPos < fullPageText.length) {
-            const matchPos = fullPageText.indexOf(cleanQuery, searchPos);
-            if (matchPos === -1) break;
-            foundExact = true;
-
+          let m;
+          while ((m = queryRegex.exec(text)) !== null) {
             matchesList.push({
               id: globalId++,
               pageNum: p,
-              snippet: fullPageText.substring(
-                Math.max(0, matchPos - 20),
-                Math.min(fullPageText.length, matchPos + cleanQuery.length + 20)
+              snippet: text.substring(
+                Math.max(0, m.index - 20),
+                Math.min(text.length, m.index + m[0].length + 20)
               ),
             });
 
-            searchPos = matchPos + cleanQuery.length;
-          }
-
-          // B) If no exact phrase match, try individual item-level match
-          if (!foundExact) {
-            for (const item of items) {
-              const str = item.str || '';
-              if (!str.trim()) continue;
-              const lowerStr = str.toLowerCase();
-
-              let startIndex = 0;
-              while (startIndex < lowerStr.length) {
-                const matchPos = lowerStr.indexOf(cleanQuery, startIndex);
-                if (matchPos === -1) break;
-
-                matchesList.push({
-                  id: globalId++,
-                  pageNum: p,
-                  snippet: str,
-                });
-
-                startIndex = matchPos + cleanQuery.length;
-              }
-            }
-          }
-
-          // C) If still no matches and query has multiple words, search each word individually
-          if (!foundExact && queryWords.length > 1) {
-            for (const word of queryWords) {
-              for (const item of items) {
-                const str = item.str || '';
-                if (!str.trim()) continue;
-                const lowerStr = str.toLowerCase();
-
-                if (lowerStr.includes(word)) {
-                  matchesList.push({
-                    id: globalId++,
-                    pageNum: p,
-                    snippet: str,
-                    word,
-                  });
-                  break; // one match per word per page to avoid duplicates
-                }
-              }
+            if (m.index === queryRegex.lastIndex) {
+              queryRegex.lastIndex++;
             }
           }
 
@@ -260,7 +246,7 @@ export default function PdfHighlightViewer({
     }
   }, [currentMatchIdx, allMatches, totalPages]);
 
-  // 3. Render pages and calculate exact pixel highlights
+  // 3. Render pages and calculate exact phrase highlights across items
   useEffect(() => {
     let isCancelled = false;
 
@@ -275,7 +261,7 @@ export default function PdfHighlightViewer({
           : Array.from({ length: doc.numPages }, (_, i) => i + 1);
 
         const pages = [];
-        const cleanQuery = (searchKeyword || '').trim().toLowerCase();
+        const cleanQuery = (searchKeyword || '').trim();
 
         for (const pageNum of pageNumbers) {
           if (isCancelled) return;
@@ -289,83 +275,26 @@ export default function PdfHighlightViewer({
           const pageMatches = [];
 
           if (cleanQuery) {
-            // Split query into individual words for fallback
-            const queryWords = cleanQuery.split(/\s+/).filter((w) => w.length >= 2);
-            let foundExactInItem = false;
+            const { text, ranges } = buildPageTextMap(items);
+            const queryRegex = getQueryRegex(cleanQuery);
 
-            // A) First pass: try exact full-phrase match within each text item
-            for (let i = 0; i < items.length; i++) {
-              const item = items[i];
-              const str = item.str || '';
-              if (!str.trim()) continue;
+            if (queryRegex) {
+              let m;
+              while ((m = queryRegex.exec(text)) !== null) {
+                const matchStart = m.index;
+                const matchEnd = m.index + m[0].length;
+                const currentId = matchCounter++;
 
-              const lowerStr = str.toLowerCase();
-              let startIndex = 0;
+                // Highlight all items that overlap with this phrase match
+                for (const range of ranges) {
+                  const overlapStart = Math.max(range.start, matchStart);
+                  const overlapEnd = Math.min(range.end, matchEnd);
 
-              while (startIndex < lowerStr.length) {
-                const matchPos = lowerStr.indexOf(cleanQuery, startIndex);
-                if (matchPos === -1) break;
-                foundExactInItem = true;
+                  if (overlapStart < overlapEnd) {
+                    const startInItem = overlapStart - range.start;
+                    const lenInItem = overlapEnd - overlapStart;
 
-                const tx = item.transform[4];
-                const ty = item.transform[5];
-                const fontH = Math.abs(item.height || item.transform[3] || 12);
-                const fontW = Math.abs(item.width || 40);
-
-                const rect = viewport.convertToViewportRectangle([
-                  tx,
-                  ty - fontH * 0.15,
-                  tx + fontW,
-                  ty + fontH * 0.85,
-                ]);
-
-                const itemLeft = Math.min(rect[0], rect[2]);
-                const itemTop = Math.min(rect[1], rect[3]);
-                const itemWidth = Math.abs(rect[2] - rect[0]);
-                const itemHeight = Math.abs(rect[3] - rect[1]);
-
-                const { offsetLeft, matchWidth } = getSubstringOffsets(
-                  str,
-                  matchPos,
-                  cleanQuery.length,
-                  itemWidth
-                );
-
-                const left = Math.max(0, itemLeft + offsetLeft - 2);
-                const top = Math.max(0, itemTop - 1);
-                const width = Math.max(14, matchWidth + 4);
-                const height = Math.max(12, itemHeight + 2);
-
-                pageMatches.push({
-                  id: matchCounter++,
-                  pageNum,
-                  left,
-                  top,
-                  width,
-                  height,
-                  snippet: str,
-                });
-
-                startIndex = matchPos + cleanQuery.length;
-              }
-            }
-
-            // B) If no exact full-phrase match in any item, highlight each word individually
-            if (!foundExactInItem && queryWords.length > 1) {
-              for (let i = 0; i < items.length; i++) {
-                const item = items[i];
-                const str = item.str || '';
-                if (!str.trim()) continue;
-
-                const lowerStr = str.toLowerCase();
-
-                for (const word of queryWords) {
-                  let startIndex = 0;
-
-                  while (startIndex < lowerStr.length) {
-                    const matchPos = lowerStr.indexOf(word, startIndex);
-                    if (matchPos === -1) break;
-
+                    const item = range.item;
                     const tx = item.transform[4];
                     const ty = item.transform[5];
                     const fontH = Math.abs(item.height || item.transform[3] || 12);
@@ -384,29 +313,26 @@ export default function PdfHighlightViewer({
                     const itemHeight = Math.abs(rect[3] - rect[1]);
 
                     const { offsetLeft, matchWidth } = getSubstringOffsets(
-                      str,
-                      matchPos,
-                      word.length,
+                      item.str,
+                      startInItem,
+                      lenInItem,
                       itemWidth
                     );
 
-                    const left = Math.max(0, itemLeft + offsetLeft - 2);
-                    const top = Math.max(0, itemTop - 1);
-                    const width = Math.max(14, matchWidth + 4);
-                    const height = Math.max(12, itemHeight + 2);
-
                     pageMatches.push({
-                      id: matchCounter++,
+                      id: currentId,
                       pageNum,
-                      left,
-                      top,
-                      width,
-                      height,
-                      snippet: str,
+                      left: Math.max(0, itemLeft + offsetLeft - 2),
+                      top: Math.max(0, itemTop - 1),
+                      width: Math.max(14, matchWidth + 4),
+                      height: Math.max(12, itemHeight + 2),
+                      snippet: item.str,
                     });
-
-                    startIndex = matchPos + word.length;
                   }
+                }
+
+                if (m.index === queryRegex.lastIndex) {
+                  queryRegex.lastIndex++;
                 }
               }
             }
@@ -440,7 +366,7 @@ export default function PdfHighlightViewer({
     };
   }, [totalPages, currentPage, searchKeyword, zoomScale, allMatches]);
 
-  // 4. Render HTML5 Canvas
+  // 4. Render HTML5 Canvas with High-DPI / Retina Crisp Scaling
   useEffect(() => {
     renderTasksRef.current.forEach((t) => {
       try {
@@ -453,13 +379,18 @@ export default function PdfHighlightViewer({
       const canvas = document.getElementById(`pdf-canvas-${pageNum}`);
       if (!canvas) return;
 
-      const context = canvas.getContext('2d');
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
+      const dpr = Math.max(window.devicePixelRatio || 1, 2);
+      const context = canvas.getContext('2d', { alpha: false });
+
+      canvas.width = Math.floor(viewport.width * dpr);
+      canvas.height = Math.floor(viewport.height * dpr);
+      canvas.style.width = `${viewport.width}px`;
+      canvas.style.height = `${viewport.height}px`;
 
       const renderContext = {
         canvasContext: context,
         viewport,
+        transform: [dpr, 0, 0, dpr, 0, 0],
       };
 
       const task = page.render(renderContext);
@@ -496,7 +427,7 @@ export default function PdfHighlightViewer({
 
   const handleZoomIn = () => setZoomScale((prev) => Math.min(2.5, +(prev + 0.15).toFixed(2)));
   const handleZoomOut = () => setZoomScale((prev) => Math.max(0.75, +(prev - 0.15).toFixed(2)));
-  const handleZoomReset = () => setZoomScale(1.35);
+  const handleZoomReset = () => setZoomScale(1.45);
 
   if (loading) {
     return (
@@ -650,35 +581,34 @@ export default function PdfHighlightViewer({
             />
 
             {/* Exact Chrome-Style Highlights */}
-            {matches.map((m) => {
+            {matches.map((m, idx) => {
               const isActive = m.id === currentMatchIdx;
               return (
                 <div
-                  key={m.id}
+                  key={idx}
                   id={`pdf-match-${m.id}`}
-                  title={`Match: "${m.snippet}" (Page ${m.pageNum})`}
+                  title={`Match (Page ${m.pageNum})`}
                   style={{
                     position: 'absolute',
                     left: `${m.left}px`,
                     top: `${m.top}px`,
                     width: `${m.width}px`,
                     height: `${m.height}px`,
-                    // Chrome Exact Highlighting:
-                    // Active match: Vibrant Sky-Blue (#38bdf8 / #0284c7)
-                    // Other matches: Warm Chrome Yellow (rgba(255, 235, 59, 0.7))
+                    // Soft transparent highlighter with multiply blend mode so words stay 100% clear and sharp
                     backgroundColor: isActive
-                      ? 'rgba(56, 189, 248, 0.88)'
-                      : 'rgba(255, 235, 59, 0.7)',
+                      ? 'rgba(56, 189, 248, 0.35)'
+                      : 'rgba(254, 240, 138, 0.45)',
                     border: isActive
-                      ? '1.5px solid #0284c7'
-                      : '1px solid rgba(234, 179, 8, 0.85)',
+                      ? '1px solid rgba(2, 132, 199, 0.7)'
+                      : '1px solid rgba(234, 179, 8, 0.45)',
                     boxShadow: isActive
-                      ? '0 0 10px rgba(14, 165, 233, 0.8)'
-                      : '0 0 3px rgba(250, 204, 21, 0.4)',
+                      ? '0 0 6px rgba(56, 189, 248, 0.35)'
+                      : 'none',
                     borderRadius: '2px',
                     pointerEvents: 'none',
+                    mixBlendMode: 'multiply',
                     zIndex: isActive ? 15 : 10,
-                    transition: 'background-color 0.15s ease',
+                    transition: 'all 0.15s ease',
                   }}
                 />
               );

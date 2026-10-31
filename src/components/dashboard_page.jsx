@@ -2317,13 +2317,27 @@ export default function DashboardPage({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="doc-preview-header">
-              <div>
-                <h3 style={{ fontSize: '11.5pt', color: '#0f172a', margin: 0, fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ minWidth: 0, flexShrink: 1, marginRight: '16px' }}>
+                <h3
+                  style={{
+                    fontSize: '11.5pt',
+                    color: '#0f172a',
+                    margin: 0,
+                    fontWeight: '600',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                  title={previewModal.doc.fileName || previewModal.doc.subject}
+                >
                   📄 {previewModal.doc.fileName || previewModal.doc.subject}
                 </h3>
               </div>
 
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'nowrap', flexShrink: 0 }}>
                 {/* Search input in header */}
                 {previewModal.fileType === 'pdf' && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap' }}>
@@ -2393,8 +2407,20 @@ export default function DashboardPage({
                     )}
 
                     {pdfSearchMessage && !pdfSearchResults.length && (
-                      <span style={{ fontSize: '9.5pt', color: '#dc2626', whiteSpace: 'nowrap' }}>
-                        {pdfSearchMessage}
+                      <span
+                        style={{
+                          fontSize: '9pt',
+                          color: '#dc2626',
+                          fontWeight: '600',
+                          backgroundColor: '#fef2f2',
+                          border: '1px solid #fecaca',
+                          borderRadius: '4px',
+                          padding: '3px 8px',
+                          whiteSpace: 'nowrap',
+                          flexShrink: 0,
+                        }}
+                      >
+                        0 matches
                       </span>
                     )}
                   </div>
@@ -2603,7 +2629,7 @@ export default function DashboardPage({
                   onMatchesFound={(matches) => {
                     setPdfSearchResults(matches);
                     if (matches.length === 0 && (pdfSearchTerm || pdfKeyword)) {
-                      setPdfSearchMessage(`No matches found for "${pdfSearchTerm || pdfKeyword}"`);
+                      setPdfSearchMessage('0 matches');
                     } else {
                       setPdfSearchMessage('');
                     }
