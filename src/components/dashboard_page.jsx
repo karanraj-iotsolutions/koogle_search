@@ -242,6 +242,19 @@ export default function DashboardPage({
       .filter(Boolean);
   }, [documents, searchQuery, docIndexMap]);
 
+  // Chronological SL mapping: data is shown new to old, so newest doc is N and oldest is 1
+  const docSlMap = useMemo(() => {
+    const map = new Map();
+    const total = documents.length;
+    documents.forEach((d, i) => {
+      const slNo = total - i;
+      if (d.id) {
+        map.set(d.id, slNo);
+      }
+    });
+    return map;
+  }, [documents]);
+
   // Load users when opening user modal
   const handleOpenUserModal = async () => {
     if (!isAdmin) return;
@@ -1000,12 +1013,13 @@ export default function DashboardPage({
                     const doc = item.doc;
                     const isMatched = !!searchQuery.trim();
                     const parityClass = idx % 2 === 0 ? 'row-even' : 'row-odd';
+                    const slNo = (doc.id && docSlMap.get(doc.id)) || (documents.length - idx);
                     return (
                       <tr
                         key={doc.id || idx}
                         className={`${parityClass} ${isMatched ? 'search-matched-row' : ''}`}
                       >
-                        <td className="col-sl">{idx + 1}</td>
+                        <td className="col-sl">{slNo}</td>
                         <td className="col-date">{highlightText(doc.date, searchQuery)}</td>
                         <td className="col-issuer">{highlightText(doc.issuer, searchQuery)}</td>
                         <td className="col-circular">
