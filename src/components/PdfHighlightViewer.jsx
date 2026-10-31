@@ -40,28 +40,27 @@ function getSubstringOffsets(fullStr, startIdx, matchLen, totalWidth) {
 
 /**
  * PdfHighlightViewer.jsx
- * Chrome-Style In-Document PDF Highlighter & Floating Find Bar
- * Matches Chrome's exact search pattern:
- * - Floating Find Bar: [ input ] [ 1/5 ] [ ▲ ] [ ▼ ] [ ✕ ]
- * - Yellow highlights for all matching words (rgba(255, 235, 59, 0.7))
- * - Vibrant sky-blue highlight for active match (rgba(56, 189, 248, 0.85))
- * - Auto-scrolls smoothly to center active match
+ * Chrome-Style Exact In-Document PDF Highlighter
+ * Controlled entirely by the dashboard header search bar.
+ * No duplicate search inputs. Yellow matches + vibrant sky-blue active match.
  */
 export default function PdfHighlightViewer({
   url,
-  initialKeyword = '',
+  searchKeyword = '',
+  currentMatchIdx = 0,
+  onMatchesFound = null,
 }) {
   const containerRef = useRef(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMsg, setLoadingMsg] = useState('Loading document...');
   const [error, setError] = useState(null);
+  const [totalPages, setTotalPages] = useState(1);
+  const [currentPage, setCurrentPage] = useState(1);
   const [pagesData, setPagesData] = useState([]);
   const [allMatches, setAllMatches] = useState([]);
-  const [currentMatchIdx, setCurrentMatchIdx] = useState(0);
-  const [searchKeyword, setSearchKeyword] = useState(initialKeyword || '');
-  const [zoomScale, setZoomScale] = useState(1.45);
+  const [zoomScale, setZoomScale] = useState(1.35);
   const pdfDocRef = useRef(null);
   const renderTasksRef = useRef([]);
-  const searchInputRef = useRef(null);
 
   // 1. Fetch and Load PDF Document
   useEffect(() => {
@@ -70,6 +69,7 @@ export default function PdfHighlightViewer({
     async function loadPdf() {
       if (!url) return;
       setLoading(true);
+      setLoadingMsg('Loading document...');
       setError(null);
 
       try {
@@ -97,6 +97,7 @@ export default function PdfHighlightViewer({
           }
           buffer = bytes.buffer;
         } else {
+          setLoadingMsg('Downloading PDF binary...');
           const resp = await fetch(url);
           if (!resp.ok) throw new Error(`HTTP ${resp.status}: Could not load PDF binary`);
           buffer = await resp.arrayBuffer();
@@ -104,11 +105,13 @@ export default function PdfHighlightViewer({
 
         if (isCancelled) return;
 
+        setLoadingMsg('Rendering pages...');
         const doc = await window.pdfjsLib.getDocument({ data: buffer }).promise;
         if (isCancelled) return;
 
         pdfDocRef.current = doc;
-        setLoading(false);
+        setTotalPages(doc.numPages || 1);
+        setCurrentPage(1);
       } catch (err) {
         if (!isCancelled) {
           console.error('PDF load error:', err);
@@ -126,24 +129,158 @@ export default function PdfHighlightViewer({
     };
   }, [url]);
 
-  // 2. Scan Pages and Calculate Exact Character-Level Highlights
+  // 2. Scan and Index Matches across the entire document
   useEffect(() => {
     let isCancelled = false;
 
-    async function indexHighlights() {
+    async function indexAllMatches() {
+      const doc = pdfDocRef.current;
+      const cleanQuery = (searchKeyword || '').trim().toLowerCase();
+
+      if (!doc || !cleanQuery) {
+        setAllMatches([]);
+        if (typeof onMatchesFound === 'function') {
+          onMatchesFound([]);
+        }
+        return;
+      }
+
+      const matchesList = [];
+      let globalId = 0;
+
+      // Split query into individual words for fallback matching
+      const queryWords = cleanQuery.split(/\s+/).filter((w) => w.length >= 2);
+
+      const maxPages = Math.min(doc.numPages, 150);
+
+      for (let p = 1; p <= maxPages; p++) {
+        if (isCancelled) return;
+
+        try {
+          const page = await doc.getPage(p);
+          const textContent = await page.getTextContent();
+          const items = textContent.items || [];
+
+          // Build full page text to try exact phrase match first
+          const fullPageText = items.map((it) => it.str || '').join(' ').toLowerCase();
+          let foundExact = false;
+
+          // A) Try exact phrase match across the full page text
+          let searchPos = 0;
+          while (searchPos < fullPageText.length) {
+            const matchPos = fullPageText.indexOf(cleanQuery, searchPos);
+            if (matchPos === -1) break;
+            foundExact = true;
+
+            matchesList.push({
+              id: globalId++,
+              pageNum: p,
+              snippet: fullPageText.substring(
+                Math.max(0, matchPos - 20),
+                Math.min(fullPageText.length, matchPos + cleanQuery.length + 20)
+              ),
+            });
+
+            searchPos = matchPos + cleanQuery.length;
+          }
+
+          // B) If no exact phrase match, try individual item-level match
+          if (!foundExact) {
+            for (const item of items) {
+              const str = item.str || '';
+              if (!str.trim()) continue;
+              const lowerStr = str.toLowerCase();
+
+              let startIndex = 0;
+              while (startIndex < lowerStr.length) {
+                const matchPos = lowerStr.indexOf(cleanQuery, startIndex);
+                if (matchPos === -1) break;
+
+                matchesList.push({
+                  id: globalId++,
+                  pageNum: p,
+                  snippet: str,
+                });
+
+                startIndex = matchPos + cleanQuery.length;
+              }
+            }
+          }
+
+          // C) If still no matches and query has multiple words, search each word individually
+          if (!foundExact && queryWords.length > 1) {
+            for (const word of queryWords) {
+              for (const item of items) {
+                const str = item.str || '';
+                if (!str.trim()) continue;
+                const lowerStr = str.toLowerCase();
+
+                if (lowerStr.includes(word)) {
+                  matchesList.push({
+                    id: globalId++,
+                    pageNum: p,
+                    snippet: str,
+                    word,
+                  });
+                  break; // one match per word per page to avoid duplicates
+                }
+              }
+            }
+          }
+
+          if (p % 10 === 0) {
+            await new Promise((r) => setTimeout(r, 0));
+          }
+        } catch (e) {
+          // ignore scan error
+        }
+      }
+
+      if (isCancelled) return;
+      setAllMatches(matchesList);
+      if (typeof onMatchesFound === 'function') {
+        onMatchesFound(matchesList);
+      }
+    }
+
+    indexAllMatches();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [totalPages, searchKeyword]);
+
+  // When active match changes, switch active page if large doc
+  useEffect(() => {
+    if (allMatches.length > 0 && allMatches[currentMatchIdx]) {
+      const targetPage = allMatches[currentMatchIdx].pageNum;
+      if (totalPages > 20 && targetPage !== currentPage) {
+        setCurrentPage(targetPage);
+      }
+    }
+  }, [currentMatchIdx, allMatches, totalPages]);
+
+  // 3. Render pages and calculate exact pixel highlights
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function renderPages() {
       const doc = pdfDocRef.current;
       if (!doc) return;
 
       try {
+        const isHuge = doc.numPages > 20;
+        const pageNumbers = isHuge
+          ? [currentPage]
+          : Array.from({ length: doc.numPages }, (_, i) => i + 1);
+
         const pages = [];
-        const matchesList = [];
-        let globalMatchId = 0;
-
         const cleanQuery = (searchKeyword || '').trim().toLowerCase();
-        const spacelessQuery = cleanQuery.replace(/\s+/g, '');
 
-        for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
+        for (const pageNum of pageNumbers) {
           if (isCancelled) return;
+
+          let matchCounter = allMatches.filter((m) => m.pageNum < pageNum).length;
 
           const page = await doc.getPage(pageNum);
           const viewport = page.getViewport({ scale: zoomScale });
@@ -152,6 +289,11 @@ export default function PdfHighlightViewer({
           const pageMatches = [];
 
           if (cleanQuery) {
+            // Split query into individual words for fallback
+            const queryWords = cleanQuery.split(/\s+/).filter((w) => w.length >= 2);
+            let foundExactInItem = false;
+
+            // A) First pass: try exact full-phrase match within each text item
             for (let i = 0; i < items.length; i++) {
               const item = items[i];
               const str = item.str || '';
@@ -160,10 +302,10 @@ export default function PdfHighlightViewer({
               const lowerStr = str.toLowerCase();
               let startIndex = 0;
 
-              // A. Match ALL direct occurrences in item.str (finds multiple words on same line)
               while (startIndex < lowerStr.length) {
                 const matchPos = lowerStr.indexOf(cleanQuery, startIndex);
                 if (matchPos === -1) break;
+                foundExactInItem = true;
 
                 const tx = item.transform[4];
                 const ty = item.transform[5];
@@ -182,7 +324,6 @@ export default function PdfHighlightViewer({
                 const itemWidth = Math.abs(rect[2] - rect[0]);
                 const itemHeight = Math.abs(rect[3] - rect[1]);
 
-                // Calculate exact sub-string coordinates
                 const { offsetLeft, matchWidth } = getSubstringOffsets(
                   str,
                   matchPos,
@@ -195,80 +336,40 @@ export default function PdfHighlightViewer({
                 const width = Math.max(14, matchWidth + 4);
                 const height = Math.max(12, itemHeight + 2);
 
-                const matchObj = {
-                  id: globalMatchId++,
+                pageMatches.push({
+                  id: matchCounter++,
                   pageNum,
                   left,
                   top,
                   width,
                   height,
                   snippet: str,
-                };
-
-                pageMatches.push(matchObj);
-                matchesList.push(matchObj);
+                });
 
                 startIndex = matchPos + cleanQuery.length;
               }
-
-              // B. Spaceless Matching (e.g. user typed "karanraj" for "KARAN RAJ")
-              if (
-                cleanQuery.length >= 4 &&
-                !lowerStr.includes(cleanQuery)
-              ) {
-                const spacelessStr = lowerStr.replace(/\s+/g, '');
-                if (spacelessStr.includes(spacelessQuery)) {
-                  const tx = item.transform[4];
-                  const ty = item.transform[5];
-                  const fontH = Math.abs(item.height || item.transform[3] || 12);
-                  const fontW = Math.abs(item.width || 40);
-
-                  const rect = viewport.convertToViewportRectangle([
-                    tx,
-                    ty - fontH * 0.15,
-                    tx + fontW,
-                    ty + fontH * 0.85,
-                  ]);
-
-                  const left = Math.max(0, Math.min(rect[0], rect[2]) - 2);
-                  const top = Math.max(0, Math.min(rect[1], rect[3]) - 1);
-                  const width = Math.max(14, Math.abs(rect[2] - rect[0]) + 4);
-                  const height = Math.max(12, Math.abs(rect[3] - rect[1]) + 2);
-
-                  const matchObj = {
-                    id: globalMatchId++,
-                    pageNum,
-                    left,
-                    top,
-                    width,
-                    height,
-                    snippet: str,
-                  };
-
-                  pageMatches.push(matchObj);
-                  matchesList.push(matchObj);
-                }
-              }
             }
 
-            // C. Compound Multi-Item Check (e.g. "KARAN" and "RAJ" separated as 2 items)
-            if (spacelessQuery.length >= 4) {
-              for (let i = 0; i < items.length - 1; i++) {
-                const it1 = items[i];
-                const it2 = items[i + 1];
-                const pairStr = ((it1.str || '') + ' ' + (it2.str || '')).toLowerCase();
-                const spacelessPair = pairStr.replace(/\s+/g, '');
+            // B) If no exact full-phrase match in any item, highlight each word individually
+            if (!foundExactInItem && queryWords.length > 1) {
+              for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                const str = item.str || '';
+                if (!str.trim()) continue;
 
-                if (
-                  spacelessPair.includes(spacelessQuery) &&
-                  !it1.str?.toLowerCase().includes(cleanQuery) &&
-                  !it2.str?.toLowerCase().includes(cleanQuery)
-                ) {
-                  for (const itm of [it1, it2]) {
-                    const tx = itm.transform[4];
-                    const ty = itm.transform[5];
-                    const fontH = Math.abs(itm.height || itm.transform[3] || 12);
-                    const fontW = Math.abs(itm.width || 40);
+                const lowerStr = str.toLowerCase();
+
+                for (const word of queryWords) {
+                  let startIndex = 0;
+
+                  while (startIndex < lowerStr.length) {
+                    const matchPos = lowerStr.indexOf(word, startIndex);
+                    if (matchPos === -1) break;
+
+                    const tx = item.transform[4];
+                    const ty = item.transform[5];
+                    const fontH = Math.abs(item.height || item.transform[3] || 12);
+                    const fontW = Math.abs(item.width || 40);
 
                     const rect = viewport.convertToViewportRectangle([
                       tx,
@@ -277,23 +378,34 @@ export default function PdfHighlightViewer({
                       ty + fontH * 0.85,
                     ]);
 
-                    const left = Math.max(0, Math.min(rect[0], rect[2]) - 2);
-                    const top = Math.max(0, Math.min(rect[1], rect[3]) - 1);
-                    const width = Math.max(14, Math.abs(rect[2] - rect[0]) + 4);
-                    const height = Math.max(12, Math.abs(rect[3] - rect[1]) + 2);
+                    const itemLeft = Math.min(rect[0], rect[2]);
+                    const itemTop = Math.min(rect[1], rect[3]);
+                    const itemWidth = Math.abs(rect[2] - rect[0]);
+                    const itemHeight = Math.abs(rect[3] - rect[1]);
 
-                    const matchObj = {
-                      id: globalMatchId++,
+                    const { offsetLeft, matchWidth } = getSubstringOffsets(
+                      str,
+                      matchPos,
+                      word.length,
+                      itemWidth
+                    );
+
+                    const left = Math.max(0, itemLeft + offsetLeft - 2);
+                    const top = Math.max(0, itemTop - 1);
+                    const width = Math.max(14, matchWidth + 4);
+                    const height = Math.max(12, itemHeight + 2);
+
+                    pageMatches.push({
+                      id: matchCounter++,
                       pageNum,
                       left,
                       top,
                       width,
                       height,
-                      snippet: itm.str,
-                    };
+                      snippet: str,
+                    });
 
-                    pageMatches.push(matchObj);
-                    matchesList.push(matchObj);
+                    startIndex = matchPos + word.length;
                   }
                 }
               }
@@ -311,23 +423,24 @@ export default function PdfHighlightViewer({
         if (isCancelled) return;
 
         setPagesData(pages);
-        setAllMatches(matchesList);
-        setCurrentMatchIdx(0);
+        setLoading(false);
       } catch (err) {
         if (!isCancelled) {
-          console.error('Highlight indexing error:', err);
+          console.error('Page render error:', err);
+          setError(err.message || 'Error rendering page');
+          setLoading(false);
         }
       }
     }
 
-    indexHighlights();
+    renderPages();
 
     return () => {
       isCancelled = true;
     };
-  }, [loading, searchKeyword, zoomScale]);
+  }, [totalPages, currentPage, searchKeyword, zoomScale, allMatches]);
 
-  // 3. Render Canvas elements safely
+  // 4. Render HTML5 Canvas
   useEffect(() => {
     renderTasksRef.current.forEach((t) => {
       try {
@@ -352,7 +465,7 @@ export default function PdfHighlightViewer({
       const task = page.render(renderContext);
       task.promise.catch((err) => {
         if (err?.name !== 'RenderingCancelledException') {
-          console.warn('Canvas render info:', err);
+          console.warn('Canvas render error:', err);
         }
       });
       renderTasksRef.current.push(task);
@@ -368,70 +481,65 @@ export default function PdfHighlightViewer({
     };
   }, [pagesData]);
 
-  // 4. Auto-Scroll smooth to current active match
+  // 5. Smooth Auto-Scroll to Active Match (exact Chrome behavior)
   useEffect(() => {
     if (allMatches.length === 0) return;
-    const activeEl = document.getElementById(`pdf-match-${currentMatchIdx}`);
-    if (activeEl) {
-      activeEl.scrollIntoView({
+    const matchEl = document.getElementById(`pdf-match-${currentMatchIdx}`);
+    if (matchEl) {
+      matchEl.scrollIntoView({
         behavior: 'smooth',
         block: 'center',
         inline: 'center',
       });
     }
-  }, [currentMatchIdx, allMatches]);
+  }, [currentMatchIdx, allMatches, pagesData]);
 
-  // Match Navigation
-  const goToNextMatch = useCallback(() => {
-    if (allMatches.length === 0) return;
-    setCurrentMatchIdx((prev) => (prev + 1) % allMatches.length);
-  }, [allMatches.length]);
-
-  const goToPrevMatch = useCallback(() => {
-    if (allMatches.length === 0) return;
-    setCurrentMatchIdx((prev) => (prev - 1 + allMatches.length) % allMatches.length);
-  }, [allMatches.length]);
-
-  const handleClearSearch = useCallback(() => {
-    setSearchKeyword('');
-    setAllMatches([]);
-    setCurrentMatchIdx(0);
-    if (searchInputRef.current) {
-      searchInputRef.current.focus();
-    }
-  }, []);
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      if (e.shiftKey) {
-        goToPrevMatch();
-      } else {
-        goToNextMatch();
-      }
-    } else if (e.key === 'Escape') {
-      handleClearSearch();
-    }
-  };
-
-  const handleZoomIn = () => setZoomScale((prev) => Math.min(2.5, +(prev + 0.2).toFixed(2)));
-  const handleZoomOut = () => setZoomScale((prev) => Math.max(0.8, +(prev - 0.2).toFixed(2)));
-  const handleZoomReset = () => setZoomScale(1.45);
+  const handleZoomIn = () => setZoomScale((prev) => Math.min(2.5, +(prev + 0.15).toFixed(2)));
+  const handleZoomOut = () => setZoomScale((prev) => Math.max(0.75, +(prev - 0.15).toFixed(2)));
+  const handleZoomReset = () => setZoomScale(1.35);
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: '60px 20px', color: '#64748b' }}>
-        <div className="spinner" style={{ margin: '0 auto 12px auto', borderTopColor: '#0f172a' }} />
-        <p style={{ fontSize: '11pt', margin: 0 }}>Rendering pages & indexing keywords...</p>
+      <div
+        style={{
+          textAlign: 'center',
+          padding: '60px 20px',
+          color: '#64748b',
+          backgroundColor: '#525659',
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <div
+          className="spinner"
+          style={{ borderTopColor: '#38bdf8', width: '36px', height: '36px', marginBottom: '14px' }}
+        />
+        <p style={{ fontSize: '12pt', color: '#f1f5f9', margin: 0, fontWeight: 500 }}>
+          {loadingMsg}
+        </p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div style={{ textAlign: 'center', padding: '40px', color: '#ef4444' }}>
-        <p style={{ fontSize: '12pt', marginBottom: '8px' }}>{error}</p>
-        <p style={{ fontSize: '10.5pt', color: '#64748b' }}>Please try opening the document in a new tab.</p>
+      <div
+        style={{
+          textAlign: 'center',
+          padding: '50px 20px',
+          color: '#ef4444',
+          backgroundColor: '#525659',
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <p style={{ fontSize: '13pt', fontWeight: 600, marginBottom: '8px', color: '#fca5a5' }}>{error}</p>
       </div>
     );
   }
@@ -446,131 +554,10 @@ export default function PdfHighlightViewer({
         flexDirection: 'column',
         backgroundColor: '#525659',
         overflow: 'hidden',
+        fontFamily: 'Calibri, sans-serif',
       }}
     >
-      {/* Floating Chrome-Style Find Bar (Matches User Screenshot Exactly) */}
-      <div
-        style={{
-          position: 'absolute',
-          top: '16px',
-          right: '24px',
-          zIndex: 1000,
-          display: 'flex',
-          alignItems: 'center',
-          backgroundColor: '#ffffff',
-          borderRadius: '8px',
-          boxShadow: '0 4px 18px rgba(0, 0, 0, 0.35)',
-          border: '1px solid #cbd5e1',
-          padding: '4px 6px 4px 10px',
-          gap: '4px',
-          fontFamily: 'Calibri, sans-serif',
-        }}
-      >
-        <input
-          ref={searchInputRef}
-          type="text"
-          value={searchKeyword}
-          onChange={(e) => setSearchKeyword(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Find in document..."
-          style={{
-            border: 'none',
-            outline: 'none',
-            fontSize: '11pt',
-            width: '160px',
-            color: '#0f172a',
-            backgroundColor: 'transparent',
-            padding: '2px 4px',
-          }}
-          autoFocus
-        />
-
-        {/* Counter: e.g. 5/5 or 1/5 */}
-        <span
-          style={{
-            fontSize: '10pt',
-            color: allMatches.length > 0 ? '#334155' : '#94a3b8',
-            padding: '0 8px',
-            borderLeft: '1px solid #e2e8f0',
-            userSelect: 'none',
-            minWidth: '42px',
-            textAlign: 'center',
-          }}
-        >
-          {allMatches.length > 0
-            ? `${currentMatchIdx + 1}/${allMatches.length}`
-            : searchKeyword.trim()
-            ? '0/0'
-            : ''}
-        </span>
-
-        {/* Previous Match (Up Arrow ^) */}
-        <button
-          type="button"
-          onClick={goToPrevMatch}
-          disabled={allMatches.length === 0}
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: allMatches.length > 0 ? 'pointer' : 'default',
-            padding: '4px 6px',
-            borderRadius: '4px',
-            color: allMatches.length > 0 ? '#1e293b' : '#cbd5e1',
-            fontSize: '11pt',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-          title="Previous match (Shift+Enter or Up)"
-        >
-          ▲
-        </button>
-
-        {/* Next Match (Down Arrow v) */}
-        <button
-          type="button"
-          onClick={goToNextMatch}
-          disabled={allMatches.length === 0}
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: allMatches.length > 0 ? 'pointer' : 'default',
-            padding: '4px 6px',
-            borderRadius: '4px',
-            color: allMatches.length > 0 ? '#1e293b' : '#cbd5e1',
-            fontSize: '11pt',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-          title="Next match (Enter or Down)"
-        >
-          ▼
-        </button>
-
-        {/* Close Button x */}
-        <button
-          type="button"
-          onClick={handleClearSearch}
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '4px 8px',
-            borderRadius: '4px',
-            color: '#64748b',
-            fontSize: '11pt',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-          title="Clear search"
-        >
-          ✕
-        </button>
-      </div>
-
-      {/* Bottom Floating Zoom Controls */}
+      {/* Floating Zoom Controls at Bottom-Right */}
       <div
         style={{
           position: 'absolute',
@@ -662,7 +649,7 @@ export default function PdfHighlightViewer({
               }}
             />
 
-            {/* Highlights Overlay: Yellow for normal matches, Chrome Sky-Blue for active match */}
+            {/* Exact Chrome-Style Highlights */}
             {matches.map((m) => {
               const isActive = m.id === currentMatchIdx;
               return (
@@ -676,38 +663,42 @@ export default function PdfHighlightViewer({
                     top: `${m.top}px`,
                     width: `${m.width}px`,
                     height: `${m.height}px`,
-                    // Exact Chrome Highlighting Style:
-                    // Active match is sky-blue (#38bdf8 / #70b5f9), other matches are warm yellow
+                    // Chrome Exact Highlighting:
+                    // Active match: Vibrant Sky-Blue (#38bdf8 / #0284c7)
+                    // Other matches: Warm Chrome Yellow (rgba(255, 235, 59, 0.7))
                     backgroundColor: isActive
-                      ? 'rgba(56, 189, 248, 0.85)' // Chrome vibrant sky-blue
-                      : 'rgba(255, 235, 59, 0.7)', // Warm vibrant yellow
+                      ? 'rgba(56, 189, 248, 0.88)'
+                      : 'rgba(255, 235, 59, 0.7)',
                     border: isActive
                       ? '1.5px solid #0284c7'
                       : '1px solid rgba(234, 179, 8, 0.85)',
                     boxShadow: isActive
-                      ? '0 0 10px rgba(14, 165, 233, 0.75)'
+                      ? '0 0 10px rgba(14, 165, 233, 0.8)'
                       : '0 0 3px rgba(250, 204, 21, 0.4)',
                     borderRadius: '2px',
                     pointerEvents: 'none',
-                    zIndex: 10,
-                    transition: 'all 0.12s ease',
+                    zIndex: isActive ? 15 : 10,
+                    transition: 'background-color 0.15s ease',
                   }}
                 />
               );
             })}
 
-            {/* Page indicator */}
+            {/* Page number badge */}
             <div
               style={{
                 position: 'absolute',
-                bottom: '-20px',
-                right: '4px',
-                fontSize: '8.5pt',
-                color: '#cbd5e1',
+                bottom: '8px',
+                right: '12px',
+                backgroundColor: 'rgba(0, 0, 0, 0.6)',
+                color: '#ffffff',
+                padding: '2px 8px',
+                borderRadius: '4px',
+                fontSize: '9pt',
                 userSelect: 'none',
               }}
             >
-              Page {pageNum} of {pagesData.length}
+              Page {pageNum} of {totalPages}
             </div>
           </div>
         ))}

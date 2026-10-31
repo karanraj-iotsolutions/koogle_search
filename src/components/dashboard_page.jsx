@@ -265,7 +265,7 @@ export default function DashboardPage({
   const [pdfSearching, setPdfSearching] = useState(false);
   const [pdfSearchMessage, setPdfSearchMessage] = useState('');
   const [docIndexMap, setDocIndexMap] = useState(SAMPLE_DOC_INDEX);
-  const [pdfViewerMode, setPdfViewerMode] = useState('highlight');
+  const [pdfViewerMode, setPdfViewerMode] = useState('native');
 
   // New Document state
   const [newDoc, setNewDoc] = useState({
@@ -684,29 +684,48 @@ export default function DashboardPage({
   const handlePreview = async (doc, initialKeyword = '', targetPage = 1) => {
     try {
       const fileType = getFileType(doc.fileName);
+      setPreviewModal({
+        url: '',
+        doc,
+        fileType,
+        viewerEngine: 'google',
+      });
+      setPreviewLoading(true);
+      setPreviewError('');
+      setExcelSheets([]);
+      setActiveSheetIndex(0);
+      setWordHtml('');
+      setTextContent('');
+      setPdfKeyword(initialKeyword);
+      setPdfSearchTerm(initialKeyword);
+      setLoadedPdfDoc(null);
+      setPdfSearchResults([]);
+      setCurrentMatchIdx(0);
+      setPdfSearchMessage('');
+
       let url = '';
 
-    if (doc.s3Key) {
-      try {
-        url = await getDocumentUrl(doc.s3Key, 'view');
-      } catch (err) {
-        console.warn('Could not retrieve S3 URL, using sample preview:', err);
+      if (doc.s3Key) {
+        try {
+          url = await getDocumentUrl(doc.s3Key, 'view');
+        } catch (err) {
+          console.warn('Could not retrieve S3 URL, using sample preview:', err);
+        }
       }
-    }
 
-    if (!url) {
-      if (fileType === 'pdf') {
-        url = generateSamplePdf(doc.subject, doc.circularNo, doc.issuer, doc.remarks);
+      if (!url) {
+        if (fileType === 'pdf') {
+          url = generateSamplePdf(doc.subject, doc.circularNo, doc.issuer, doc.remarks);
+        }
       }
-    }
 
-    setPreviewModal({
-      url,
-      doc,
-      fileType,
-      viewerEngine: 'google',
-    });
-    setPreviewLoading(false);
+      setPreviewModal({
+        url,
+        doc,
+        fileType,
+        viewerEngine: 'google',
+      });
+      setPreviewLoading(false);
     setPreviewError('');
     setExcelSheets([]);
     setActiveSheetIndex(0);
@@ -931,34 +950,22 @@ export default function DashboardPage({
     if (pdfSearchResults.length === 0) return;
     const nextIdx = (currentMatchIdx + 1) % pdfSearchResults.length;
     setCurrentMatchIdx(nextIdx);
-    if (pdfViewerMode === 'native') {
-      jumpToPdfMatch(pdfSearchResults[nextIdx].pageNum);
-    }
   };
 
   const handlePrevMatch = () => {
     if (pdfSearchResults.length === 0) return;
     const prevIdx = (currentMatchIdx - 1 + pdfSearchResults.length) % pdfSearchResults.length;
     setCurrentMatchIdx(prevIdx);
-    if (pdfViewerMode === 'native') {
-      jumpToPdfMatch(pdfSearchResults[prevIdx].pageNum);
-    }
   };
 
-  const handleSearchPdf = async () => {
+  const handleSearchPdf = () => {
     const query = pdfKeyword.trim();
     if (!query) {
       handleClearPdfSearch();
       return;
     }
-
     setPdfSearchTerm(query);
     setCurrentMatchIdx(0);
-
-    if (pdfViewerMode === 'native' && previewModal?.url) {
-      const baseUrl = previewModal.url.split('#')[0];
-      setPdfSearchUrl(`${baseUrl}#search=${encodeURIComponent(query)}&view=FitH`);
-    }
   };
 
   const handleClearPdfSearch = () => {
@@ -967,10 +974,6 @@ export default function DashboardPage({
     setPdfSearchResults([]);
     setPdfSearchMessage('');
     setCurrentMatchIdx(0);
-    if (previewModal?.url) {
-      const baseUrl = previewModal.url.split('#')[0];
-      setPdfSearchUrl(`${baseUrl}#toolbar=1&navpanes=0&view=FitH`);
-    }
   };
 
   // Document: Download
@@ -1359,7 +1362,7 @@ export default function DashboardPage({
                               onClick={() => handlePreview(doc, searchQuery, item.pageNum)}
                               title={`Matched inside file (Page ${item.pageNum}) - Click to open and highlight`}
                             >
-                              <span className="match-tag">📄 In-file match (Pg {item.pageNum}):</span>
+                              <span className="match-tag">In-file match (Pg {item.pageNum}):</span>
                               <span className="match-snippet-text">{highlightText(item.snippet, searchQuery)}</span>
                             </div>
                           )}
@@ -2315,17 +2318,14 @@ export default function DashboardPage({
           >
             <div className="doc-preview-header">
               <div>
-                <h3 style={{ fontSize: '13pt', color: '#0f172a', margin: 0 }}>
-                  📄 {previewModal.doc.subject}
+                <h3 style={{ fontSize: '11.5pt', color: '#0f172a', margin: 0, fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  📄 {previewModal.doc.fileName || previewModal.doc.subject}
                 </h3>
-                <p style={{ fontSize: '10pt', color: '#64748b', marginTop: '4px', margin: 0 }}>
-                  File: <strong>{previewModal.doc.fileName}</strong> • Circular: {previewModal.doc.circularNo} • Issuer: {previewModal.doc.issuer}
-                </p>
               </div>
 
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                {/* Search input in header (when in native mode) */}
-                {previewModal.fileType === 'pdf' && pdfViewerMode === 'native' && (
+                {/* Search input in header */}
+                {previewModal.fileType === 'pdf' && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap' }}>
                     <div className="pdf-search-box">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
@@ -2336,7 +2336,12 @@ export default function DashboardPage({
                         type="text"
                         placeholder="Search keyword in PDF..."
                         value={pdfKeyword}
-                        onChange={(e) => setPdfKeyword(e.target.value)}
+                        onChange={(e) => {
+                          setPdfKeyword(e.target.value);
+                          if (!e.target.value.trim()) {
+                            handleClearPdfSearch();
+                          }
+                        }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') handleSearchPdf();
                         }}
@@ -2395,27 +2400,7 @@ export default function DashboardPage({
                   </div>
                 )}
 
-                {/* PDF Viewer Mode Switcher */}
-                {previewModal.fileType === 'pdf' && (
-                  <button
-                    type="button"
-                    className="btn-cancel"
-                    style={{
-                      padding: '7px 12px',
-                      fontSize: '10pt',
-                      backgroundColor: pdfViewerMode === 'highlight' ? '#fef3c7' : '#ffffff',
-                      borderColor: pdfViewerMode === 'highlight' ? '#f59e0b' : '#cbd5e1',
-                      color: pdfViewerMode === 'highlight' ? '#b45309' : '#0f172a',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontWeight: '500',
-                    }}
-                    onClick={() => setPdfViewerMode(pdfViewerMode === 'highlight' ? 'native' : 'highlight')}
-                    title="Toggle between Yellow Highlighter View and Browser Native PDF Viewer"
-                  >
-                    {pdfViewerMode === 'highlight' ? '🎨 Highlight Mode' : '📄 Native Mode'}
-                  </button>
-                )}
+
 
                 {previewModal.fileType === 'office' && (
                   <button
@@ -2609,26 +2594,21 @@ export default function DashboardPage({
                 />
               )}
 
-              {/* PDF Preview */}
+              {/* PDF Preview with Exact Chrome Ctrl+F Highlighting */}
               {!previewLoading && !previewError && previewModal.fileType === 'pdf' && (
-                pdfViewerMode === 'highlight' ? (
-                  <PdfHighlightViewer
-                    url={previewModal.url}
-                    initialKeyword={pdfKeyword}
-                  />
-                ) : (
-                  <iframe
-                    key={pdfSearchUrl || 'default-pdf'}
-                    src={
-                      pdfSearchUrl ||
-                      (previewModal.url.includes('#')
-                        ? previewModal.url
-                        : `${previewModal.url}#toolbar=1&navpanes=0&view=FitH`)
+                <PdfHighlightViewer
+                  url={previewModal.url}
+                  searchKeyword={pdfSearchTerm || pdfKeyword}
+                  currentMatchIdx={currentMatchIdx}
+                  onMatchesFound={(matches) => {
+                    setPdfSearchResults(matches);
+                    if (matches.length === 0 && (pdfSearchTerm || pdfKeyword)) {
+                      setPdfSearchMessage(`No matches found for "${pdfSearchTerm || pdfKeyword}"`);
+                    } else {
+                      setPdfSearchMessage('');
                     }
-                    title={previewModal.doc.subject}
-                    className="doc-preview-iframe"
-                  />
-                )
+                  }}
+                />
               )}
 
               {/* Text File Preview (.txt, .csv, .log, .json) */}
