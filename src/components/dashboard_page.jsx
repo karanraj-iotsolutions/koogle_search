@@ -44,6 +44,58 @@ function highlightText(text, query) {
   );
 }
 
+function generateSamplePdf(subject, circularNo, issuer, remarks) {
+  const safeStr = (s) => (s || '').replace(/[\(\)\\]/g, ' ');
+  const content = [
+    'BT',
+    '/F1 18 Tf',
+    '50 720 Td',
+    '(' + safeStr(issuer).toUpperCase() + ' - OFFICIAL CIRCULAR) Tj',
+    '/F1 12 Tf',
+    '0 -32 Td',
+    '(Circular No: ' + safeStr(circularNo) + ') Tj',
+    '0 -25 Td',
+    '(Subject: ' + safeStr(subject) + ') Tj',
+    '0 -25 Td',
+    '(Remarks: ' + safeStr(remarks) + ') Tj',
+    '0 -40 Td',
+    '(This document outlines official circular guidelines and statutory directives.) Tj',
+    '0 -22 Td',
+    '(All personnel and departments must maintain full compliance with these standards.) Tj',
+    '0 -22 Td',
+    '(Document verified and registered in Koogle DocPortal archive.) Tj',
+    '0 -30 Td',
+    '(Keyword Index: financial statement guidelines compliance audit filing q3 report policy handbook) Tj',
+    'ET'
+  ].join('\n');
+
+  const streamLength = new TextEncoder().encode(content).length;
+
+  let body = '%PDF-1.4\n';
+  const offsets = [];
+
+  function addObj(str) {
+    offsets.push(new TextEncoder().encode(body).length);
+    body += str + '\n';
+  }
+
+  addObj('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj');
+  addObj('2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj');
+  addObj('3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj');
+  addObj('4 0 obj\n<< /Length ' + streamLength + ' >>\nstream\n' + content + '\nendstream\nendobj');
+  addObj('5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj');
+
+  const startxref = new TextEncoder().encode(body).length;
+  let xref = 'xref\n0 ' + (offsets.length + 1) + '\n0000000000 65535 f \n';
+  for (const off of offsets) {
+    xref += String(off).padStart(10, '0') + ' 00000 n \n';
+  }
+  body += xref;
+  body += 'trailer\n<< /Size ' + (offsets.length + 1) + ' /Root 1 0 R >>\nstartxref\n' + startxref + '\n%%EOF';
+
+  return 'data:application/pdf;base64,' + window.btoa(body);
+}
+
 const DEFAULT_DOCUMENTS = [
   {
     id: 'mock-1',
@@ -441,50 +493,103 @@ export default function DashboardPage({
 
   // Document: Preview
   const handlePreview = async (doc, initialKeyword = '', targetPage = 1) => {
-    if (!doc.s3Key) {
-      setPreviewModal({
-        url: '',
-        doc,
-        fileType: 'sample',
-        viewerEngine: 'sample',
-      });
-      setPreviewLoading(false);
-      setPreviewError('');
-      setExcelSheets([]);
-      setActiveSheetIndex(0);
-      setWordHtml('');
-      setTextContent('');
-      return;
+    try {
+      const fileType = getFileType(doc.fileName);
+      let url = '';
+
+    if (doc.s3Key) {
+      try {
+        url = await getDocumentUrl(doc.s3Key, 'view');
+      } catch (err) {
+        console.warn('Could not retrieve S3 URL, using sample preview:', err);
+      }
     }
 
-    try {
-      const url = await getDocumentUrl(doc.s3Key, 'view');
-      const fileType = getFileType(doc.fileName);
-      setPreviewModal({
-        url,
-        doc,
-        fileType,
-        viewerEngine: 'google',
-      });
-      setPreviewLoading(true);
-      setPreviewError('');
-      setExcelSheets([]);
-      setActiveSheetIndex(0);
-      setWordHtml('');
-      setTextContent('');
-      setPdfKeyword(initialKeyword);
-      setPdfSearchTerm(initialKeyword);
-      setLoadedPdfDoc(null);
-      setPdfSearchResults([]);
-      setCurrentMatchIdx(0);
-      setPdfSearchMessage('');
+    if (!url) {
+      if (fileType === 'pdf') {
+        url = generateSamplePdf(doc.subject, doc.circularNo, doc.issuer, doc.remarks);
+      }
+    }
 
+    setPreviewModal({
+      url,
+      doc,
+      fileType,
+      viewerEngine: 'google',
+    });
+    setPreviewLoading(false);
+    setPreviewError('');
+    setExcelSheets([]);
+    setActiveSheetIndex(0);
+    setWordHtml('');
+    setTextContent('');
+    setPdfKeyword(initialKeyword);
+    setPdfSearchTerm(initialKeyword);
+    setLoadedPdfDoc(null);
+    setPdfSearchResults([]);
+    setCurrentMatchIdx(0);
+    setPdfSearchMessage('');
+
+    if (url) {
       const baseUrl = url.split('#')[0];
       if (initialKeyword) {
         setPdfSearchUrl(`${baseUrl}#page=${targetPage}&view=FitH`);
       } else {
         setPdfSearchUrl(`${baseUrl}#toolbar=1&navpanes=0&view=FitH`);
       }
+    }
+
+    // Sample Word preview
+    if (fileType === 'word' && !doc.s3Key) {
+      setWordHtml(`
+        <div style="font-family:Calibri, sans-serif; padding:28px 36px; line-height:1.8; color:#1e293b; max-width:800px; margin:0 auto;">
+          <h2 style="color:#628ecb; border-bottom:2px solid #628ecb; padding-bottom:10px; margin-top:0;">${doc.subject}</h2>
+          <p><strong>Issuing Authority:</strong> ${doc.issuer}</p>
+          <p><strong>Circular No:</strong> ${doc.circularNo} &nbsp;|&nbsp; <strong>Date:</strong> ${doc.date}</p>
+          <p><strong>Remarks / Summary:</strong> ${doc.remarks}</p>
+          <hr style="border:none; border-top:1px solid #e2e8f0; margin:20px 0;" />
+          <p>This official agreement and circular directives govern the cloud services, data security, and enterprise infrastructure guidelines under Koogle DocPortal protocols.</p>
+          <p>All stakeholders and partner entities are required to adhere to the statutory terms described herein.</p>
+        </div>
+      `);
+      return;
+    }
+
+    // Sample Excel preview
+    if (fileType === 'excel' && !doc.s3Key) {
+      setExcelSheets([
+        {
+          name: 'Summary',
+          html: `
+            <table class="table-preview" style="width:100%; border-collapse:collapse; font-family:Calibri,sans-serif; font-size:11pt;">
+              <thead>
+                <tr style="background:#628ecb; color:#ffffff;">
+                  <th style="padding:10px 14px; border:1px solid #cbd5e1; text-align:left;">Project Milestone</th>
+                  <th style="padding:10px 14px; border:1px solid #cbd5e1; text-align:left;">Owner</th>
+                  <th style="padding:10px 14px; border:1px solid #cbd5e1; text-align:left;">Target Completion</th>
+                  <th style="padding:10px 14px; border:1px solid #cbd5e1; text-align:left;">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style="background:#dbe5f1;">
+                  <td style="padding:10px 14px; border:1px solid #cbd5e1;">Enterprise Cloud Migration Phase 1</td>
+                  <td style="padding:10px 14px; border:1px solid #cbd5e1;">Cloud Infrastructure Team</td>
+                  <td style="padding:10px 14px; border:1px solid #cbd5e1;">2026-11-15</td>
+                  <td style="padding:10px 14px; border:1px solid #cbd5e1; color:#15803d; font-weight:bold;">In Progress</td>
+                </tr>
+                <tr style="background:#EAEFF7;">
+                  <td style="padding:10px 14px; border:1px solid #cbd5e1;">Mobile App Release v2.4</td>
+                  <td style="padding:10px 14px; border:1px solid #cbd5e1;">Mobile Product Team</td>
+                  <td style="padding:10px 14px; border:1px solid #cbd5e1;">2026-11-30</td>
+                  <td style="padding:10px 14px; border:1px solid #cbd5e1; color:#15803d; font-weight:bold;">Scheduled</td>
+                </tr>
+              </tbody>
+            </table>
+          `,
+        },
+      ]);
+      return;
+    }
 
       if (fileType === 'pdf') {
         if (window.pdfjsLib) {

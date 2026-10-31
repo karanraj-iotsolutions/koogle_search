@@ -86,9 +86,21 @@ export default function PdfHighlightViewer({
         window.pdfjsLib.GlobalWorkerOptions.workerSrc =
           'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-        const resp = await fetch(url);
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}: Could not load PDF binary`);
-        const buffer = await resp.arrayBuffer();
+        let buffer;
+        if (url.startsWith('data:application/pdf;base64,')) {
+          const base64Data = url.split(',')[1];
+          const binaryStr = window.atob(base64Data);
+          const len = binaryStr.length;
+          const bytes = new Uint8Array(len);
+          for (let i = 0; i < len; i++) {
+            bytes[i] = binaryStr.charCodeAt(i);
+          }
+          buffer = bytes.buffer;
+        } else {
+          const resp = await fetch(url);
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}: Could not load PDF binary`);
+          buffer = await resp.arrayBuffer();
+        }
 
         if (isCancelled) return;
 
