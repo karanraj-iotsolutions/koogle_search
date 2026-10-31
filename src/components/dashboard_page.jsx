@@ -193,11 +193,21 @@ export default function DashboardPage({
   onLogout,
 }) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [recycleBin, setRecycleBin] = useState(() => {
+    try {
+      const cached = localStorage.getItem('koogle_recycle_bin');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [showRecycleModal, setShowRecycleModal] = useState(false);
   const [documents, setDocuments] = useState(() => {
     try {
-      const cached = localStorage.getItem('koogle_deleted_mock_ids');
-      const deleted = cached ? JSON.parse(cached) : [];
-      return DEFAULT_DOCUMENTS.filter((d) => !deleted.includes(d.id));
+      const cachedRecycled = localStorage.getItem('koogle_recycle_bin');
+      const recycled = cachedRecycled ? JSON.parse(cachedRecycled) : [];
+      const recycledIds = new Set(recycled.map((d) => d.id));
+      return DEFAULT_DOCUMENTS.filter((d) => !recycledIds.has(d.id));
     } catch (e) {
       return DEFAULT_DOCUMENTS;
     }
@@ -297,14 +307,17 @@ export default function DashboardPage({
     try {
       const items = await getDocuments();
       if (Array.isArray(items)) {
+        const cachedRecycled = localStorage.getItem('koogle_recycle_bin');
+        const recycled = cachedRecycled ? JSON.parse(cachedRecycled) : [];
+        const recycledIds = new Set(recycled.map((d) => d.id));
+
         if (items.length > 0) {
-          setDocuments(items);
-          indexDocuments(items);
+          const activeItems = items.filter((d) => !recycledIds.has(d.id));
+          setDocuments(activeItems);
+          indexDocuments(activeItems);
         } else {
-          // If backend has 0 documents, respect deleted mock items
-          const cached = localStorage.getItem('koogle_deleted_mock_ids');
-          const deleted = cached ? JSON.parse(cached) : [];
-          setDocuments(DEFAULT_DOCUMENTS.filter((d) => !deleted.includes(d.id)));
+          const activeMock = DEFAULT_DOCUMENTS.filter((d) => !recycledIds.has(d.id));
+          setDocuments(activeMock);
         }
       }
       setBackendConnected(true);
@@ -520,33 +533,95 @@ export default function DashboardPage({
     }
   };
 
-  // Document: Delete
-  const handleDelete = async (id, s3Key) => {
-    if (!window.confirm('Are you sure you want to delete this document record?')) {
+  // Document: Move to Recycle Bin (Soft Delete)
+  const handleDelete = (doc) => {
+    // Immediately remove from active dashboard
+    setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
+
+    // Add to Recycle Bin with persistence in localStorage
+    setRecycleBin((prev) => {
+      const updated = [doc, ...prev.filter((d) => d.id !== doc.id)];
+      try {
+        localStorage.setItem('koogle_recycle_bin', JSON.stringify(updated));
+      } catch (e) {
+        console.warn('Recycle bin localStorage error:', e);
+      }
+      return updated;
+    });
+  };
+
+  // Document: Restore from Recycle Bin back to Dashboard
+  const handleRestore = (doc) => {
+    // Remove from Recycle Bin
+    setRecycleBin((prev) => {
+      const updated = prev.filter((d) => d.id !== doc.id);
+      try {
+        localStorage.setItem('koogle_recycle_bin', JSON.stringify(updated));
+      } catch (e) {
+        console.warn('Recycle bin localStorage error:', e);
+      }
+      return updated;
+    });
+
+    // Add back to active dashboard documents
+    setDocuments((prev) => [doc, ...prev]);
+  };
+
+  // Document: Permanent Delete from Recycle Bin (Erases permanently from AWS S3 & DynamoDB)
+  const handlePermanentDelete = async (doc) => {
+    if (
+      !window.confirm(
+        `Are you sure you want to PERMANENTLY delete "${doc.subject || doc.fileName}" from AWS S3 and DynamoDB? This cannot be undone.`
+      )
+    ) {
       return;
     }
 
-    // Immediately remove from UI state
-    setDocuments((prev) => prev.filter((d) => d.id !== id));
-
-    // If it's a sample/mock item, persist deletion in localStorage so it never comes back
-    if (id && String(id).startsWith('mock-')) {
+    // Remove from Recycle Bin
+    setRecycleBin((prev) => {
+      const updated = prev.filter((d) => d.id !== doc.id);
       try {
-        const cached = localStorage.getItem('koogle_deleted_mock_ids');
-        const deleted = cached ? JSON.parse(cached) : [];
-        if (!deleted.includes(id)) {
-          deleted.push(id);
-          localStorage.setItem('koogle_deleted_mock_ids', JSON.stringify(deleted));
-        }
+        localStorage.setItem('koogle_recycle_bin', JSON.stringify(updated));
       } catch (e) {
-        console.warn('localStorage error:', e);
+        console.warn('Recycle bin localStorage error:', e);
       }
-    } else {
-      // Real document in DynamoDB and AWS S3
+      return updated;
+    });
+
+    // If real file, delete from S3 and DynamoDB
+    if (doc.s3Key) {
       try {
-        await deleteDocument(id, s3Key);
+        await deleteDocument(doc.id, doc.s3Key);
       } catch (err) {
-        console.error('Failed to delete document from backend:', err);
+        console.error('Failed to permanently delete from AWS S3 / DynamoDB:', err);
+      }
+    }
+  };
+
+  // Empty Entire Recycle Bin
+  const handleEmptyRecycleBin = async () => {
+    if (recycleBin.length === 0) return;
+    if (
+      !window.confirm(
+        `Are you sure you want to PERMANENTLY delete all ${recycleBin.length} items in the Recycle Bin from AWS S3? This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+
+    const itemsToDelete = [...recycleBin];
+    setRecycleBin([]);
+    try {
+      localStorage.removeItem('koogle_recycle_bin');
+    } catch (e) {}
+
+    for (const d of itemsToDelete) {
+      if (d.s3Key) {
+        try {
+          await deleteDocument(d.id, d.s3Key);
+        } catch (e) {
+          console.warn('Failed to delete S3 file:', e);
+        }
       }
     }
   };
@@ -1094,6 +1169,30 @@ export default function DashboardPage({
             </button>
           )}
 
+          {/* Recycle Bin Button */}
+          <button
+            type="button"
+            className="recycle-btn"
+            onClick={() => setShowRecycleModal(true)}
+            title="Recycle Bin (View deleted documents to restore or permanently delete)"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              width="15"
+              height="15"
+            >
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2 2v2" />
+            </svg>
+            <span>Recycle Bin</span>
+            {recycleBin.length > 0 && (
+              <span className="recycle-badge">{recycleBin.length}</span>
+            )}
+          </button>
+
           {/* Logout Button */}
           <button
             type="button"
@@ -1348,8 +1447,8 @@ export default function DashboardPage({
                             <button
                               type="button"
                               className="icon-action-btn delete-btn"
-                              title="Delete Record"
-                              onClick={() => handleDelete(doc.id, doc.s3Key)}
+                              title="Move to Recycle Bin"
+                              onClick={() => handleDelete(doc)}
                             >
                               <svg
                                 viewBox="0 0 24 24"
@@ -2018,6 +2117,146 @@ export default function DashboardPage({
                   </table>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ====================================================
+          MODAL: Recycle Bin
+          ==================================================== */}
+      {showRecycleModal && (
+        <div className="modal-backdrop" onClick={() => setShowRecycleModal(false)}>
+          <div
+            className="modal-card"
+            style={{ maxWidth: '880px', width: '92%' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ fontSize: '13pt', margin: 0, color: '#0f172a' }}>
+                  🗑️ Recycle Bin ({recycleBin.length})
+                </h3>
+                <p style={{ fontSize: '10pt', color: '#64748b', margin: '4px 0 0 0' }}>
+                  Documents deleted from dashboard can be restored back or permanently deleted from AWS S3.
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                {recycleBin.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleEmptyRecycleBin}
+                    style={{
+                      backgroundColor: '#fee2e2',
+                      color: '#dc2626',
+                      border: '1px solid #fca5a5',
+                      borderRadius: '6px',
+                      padding: '6px 12px',
+                      fontSize: '9.5pt',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Empty Recycle Bin
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="modal-close"
+                  onClick={() => setShowRecycleModal(false)}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <div style={{ marginTop: '16px', maxHeight: '420px', overflowY: 'auto' }}>
+              {recycleBin.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 16px', color: '#64748b' }}>
+                  <p style={{ fontSize: '12pt', margin: '0 0 4px 0' }}>Recycle Bin is empty</p>
+                  <p style={{ fontSize: '10pt', color: '#94a3b8', margin: 0 }}>
+                    When you delete documents from the dashboard, they will appear here to restore or permanently erase.
+                  </p>
+                </div>
+              ) : (
+                <div className="table-responsive">
+                  <table className="user-mgmt-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Circular No</th>
+                        <th>Subject</th>
+                        <th>File Name</th>
+                        <th style={{ width: '190px', textAlign: 'center' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recycleBin.map((doc, idx) => {
+                        const isEven = idx % 2 === 0;
+                        return (
+                          <tr key={doc.id || idx} className={isEven ? 'user-row-even' : 'user-row-odd'}>
+                            <td>{doc.date}</td>
+                            <td>{doc.circularNo}</td>
+                            <td style={{ fontWeight: 'normal' }}>{doc.subject}</td>
+                            <td style={{ color: '#475569', fontSize: '9.5pt' }}>{doc.fileName}</td>
+                            <td style={{ textAlign: 'center' }}>
+                              <div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center', justifyContent: 'center' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRestore(doc)}
+                                  title="Restore to Dashboard"
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    backgroundColor: '#ecfdf5',
+                                    color: '#059669',
+                                    border: '1px solid #a7f3d0',
+                                    borderRadius: '6px',
+                                    padding: '5px 10px',
+                                    fontSize: '9.5pt',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  🔄 Restore
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handlePermanentDelete(doc)}
+                                  title="Permanently Delete from S3"
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    backgroundColor: '#fff1f2',
+                                    color: '#e11d48',
+                                    border: '1px solid #fecdd3',
+                                    borderRadius: '6px',
+                                    padding: '5px 10px',
+                                    fontSize: '9.5pt',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  🗑️ Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="modal-actions" style={{ marginTop: '20px' }}>
+              <button
+                type="button"
+                className="btn-cancel"
+                onClick={() => setShowRecycleModal(false)}
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
