@@ -957,10 +957,11 @@ export default function DashboardPage({
                   searchResults.map((item, idx) => {
                     const doc = item.doc;
                     const isMatched = !!searchQuery.trim();
+                    const parityClass = idx % 2 === 0 ? 'row-even' : 'row-odd';
                     return (
                       <tr
                         key={doc.id || idx}
-                        className={isMatched ? 'search-matched-row' : ''}
+                        className={`${parityClass} ${isMatched ? 'search-matched-row' : ''}`}
                       >
                         <td className="col-sl">{idx + 1}</td>
                         <td className="col-date">{highlightText(doc.date, searchQuery)}</td>
