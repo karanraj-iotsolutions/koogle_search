@@ -214,36 +214,11 @@
 }
 
 /* =========================================
-   RECORDS TABLE CARD
+   RECORDS TABLE
    ========================================= */
-.records-card {
-  background-color: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 14px;
-  padding: 24px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
-}
-
-.records-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 20px;
-}
-
-.records-title {
-  font-size: 13pt;
-  font-weight: normal !important;
-  color: #18181b;
-}
-
-.items-badge {
-  background-color: #f1f5f9;
-  color: #64748b;
-  font-size: 10.5pt;
-  font-weight: normal !important;
-  padding: 3px 10px;
-  border-radius: 12px;
+.records-table-container {
+  width: 100%;
+  margin-top: 10px;
 }
 
 .table-responsive {

@@ -983,13 +983,8 @@ export default function DashboardPage({
           </div>
         </div>
 
-        {/* Document Records Table Card */}
-        <section className="records-card">
-          <div className="records-header">
-            <h2 className="records-title">Document Records</h2>
-            <span className="items-badge">{searchResults.length} items</span>
-          </div>
-
+        {/* Document Records Table */}
+        <section className="records-table-container">
           <div className="table-responsive">
             <table className="doc-table">
               <thead>
