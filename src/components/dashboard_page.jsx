@@ -191,11 +191,9 @@ export default function DashboardPage({
   const loadBackendDocuments = async () => {
     try {
       const items = await getDocuments();
-      if (Array.isArray(items)) {
+      if (Array.isArray(items) && items.length > 0) {
         setDocuments(items);
-        if (items.length > 0) {
-          indexDocuments(items);
-        }
+        indexDocuments(items);
       }
       setBackendConnected(true);
     } catch (err) {
@@ -444,7 +442,18 @@ export default function DashboardPage({
   // Document: Preview
   const handlePreview = async (doc, initialKeyword = '', targetPage = 1) => {
     if (!doc.s3Key) {
-      alert(`Previewing sample file: ${doc.fileName}`);
+      setPreviewModal({
+        url: '',
+        doc,
+        fileType: 'sample',
+        viewerEngine: 'sample',
+      });
+      setPreviewLoading(false);
+      setPreviewError('');
+      setExcelSheets([]);
+      setActiveSheetIndex(0);
+      setWordHtml('');
+      setTextContent('');
       return;
     }
 
@@ -2059,6 +2068,28 @@ export default function DashboardPage({
                   >
                     Download File Instead ⬇
                   </button>
+                </div>
+              )}
+
+              {/* Sample Document In-App Preview */}
+              {!previewLoading && !previewError && previewModal.fileType === 'sample' && (
+                <div style={{ width: '100%', height: '100%', padding: '32px', overflow: 'auto', backgroundColor: '#f8fafc' }}>
+                  <div style={{ maxWidth: '780px', margin: '0 auto', backgroundColor: '#ffffff', padding: '36px 44px', borderRadius: '10px', border: '1px solid #e2e8f0', boxShadow: '0 4px 16px rgba(0,0,0,0.04)', fontFamily: 'Calibri, sans-serif' }}>
+                    <div style={{ borderBottom: '2px solid #628ecb', paddingBottom: '16px', marginBottom: '20px' }}>
+                      <span style={{ fontSize: '10pt', textTransform: 'uppercase', color: '#628ecb', fontWeight: 'bold', letterSpacing: '1px' }}>Official Document Record</span>
+                      <h2 style={{ fontSize: '18pt', color: '#1e293b', margin: '8px 0 4px 0', fontWeight: 'normal' }}>{previewModal.doc.subject}</h2>
+                      <p style={{ fontSize: '11pt', color: '#64748b', margin: 0 }}>Circular No: <strong>{previewModal.doc.circularNo}</strong> | Date: <strong>{previewModal.doc.date}</strong></p>
+                    </div>
+                    <div style={{ fontSize: '12pt', lineHeight: '1.8', color: '#334155' }}>
+                      <p><strong>Issuing Authority:</strong> {previewModal.doc.issuer}</p>
+                      <p><strong>Remarks / Summary:</strong> {previewModal.doc.remarks}</p>
+                      <p><strong>File Name:</strong> {previewModal.doc.fileName}</p>
+                      <hr style={{ border: 'none', borderTop: '1px solid #f1f5f9', margin: '20px 0' }} />
+                      <p style={{ color: '#475569' }}>
+                        This is an official document record in the Koogle DocPortal system. Full-text indexing is active for this record.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               )}
 
