@@ -666,22 +666,71 @@
 /* User Management Table */
 .user-mgmt-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   text-align: left;
-  font-size: 11pt;
+  font-family: Calibri, sans-serif !important;
+  font-size: 11pt !important;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #b3c7df;
+  margin-top: 8px;
+}
+
+.user-mgmt-table thead tr {
+  background-color: #628ecb !important;
 }
 
 .user-mgmt-table th {
   padding: 10px 12px;
-  color: #64748b;
-  font-weight: normal !important;
-  border-bottom: 1px solid #e2e8f0;
+  background-color: #628ecb !important;
+  color: #ffffff !important;
+  font-family: Calibri, sans-serif !important;
+  font-size: 11pt !important;
+  font-weight: 400 !important;
+  white-space: nowrap;
+  border-right: 1px solid rgba(255, 255, 255, 0.35);
+  border-bottom: 1px solid #b3c7df;
+}
+
+.user-mgmt-table th:first-child {
+  border-top-left-radius: 7px;
+}
+
+.user-mgmt-table th:last-child {
+  border-top-right-radius: 7px;
+  border-right: none;
+}
+
+.user-mgmt-table tbody tr.user-row-even td {
+  background-color: #dbe5f1;
+}
+
+.user-mgmt-table tbody tr.user-row-odd td {
+  background-color: #EAEFF7;
+}
+
+.user-mgmt-table tbody tr:hover td {
+  background-color: #cadbee !important;
 }
 
 .user-mgmt-table td {
-  padding: 12px;
-  border-bottom: 1px solid #f1f5f9;
+  padding: 10px 12px;
   vertical-align: middle;
+  font-family: Calibri, sans-serif !important;
+  font-size: 11pt !important;
+  font-weight: 400 !important;
+  color: #1e293b;
+  border-bottom: 1px solid #c2d3e8;
+  border-right: 1px solid #c2d3e8;
+}
+
+.user-mgmt-table td:last-child {
+  border-right: none;
+}
+
+.user-mgmt-table tbody tr:last-child td {
+  border-bottom: none;
 }
 
 .role-pill {
@@ -711,8 +760,9 @@
 }
 
 .access-tag {
-  background-color: #f1f5f9;
-  color: #475569;
+  background-color: rgba(255, 255, 255, 0.75);
+  border: 1px solid #cbd5e1;
+  color: #334155;
   padding: 1px 6px;
   border-radius: 4px;
   font-size: 9pt;

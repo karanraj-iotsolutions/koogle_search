@@ -1734,65 +1734,42 @@ export default function DashboardPage({
                         <th>Email</th>
                         <th>Role</th>
                         <th>Permissions</th>
-                        <th style={{ width: '120px', textAlign: 'right' }}>Action</th>
+                        <th style={{ width: '110px', textAlign: 'center' }}>Action</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {userList.map((u) => (
-                        <tr key={u.username}>
-                          <td style={{ fontWeight: 'normal' }}>{u.username}</td>
-                          <td style={{ color: '#64748b' }}>{u.email || '-'}</td>
-                          <td>
-                            <span
-                              className={`role-pill ${
-                                u.role === 'super_admin' ? 'role-super' : 'role-admin'
-                              }`}
-                            >
-                              {u.role === 'super_admin' ? '★ Super Admin' : u.role}
-                            </span>
-                          </td>
-                          <td>
-                            <div className="perm-pills-row">
-                              {(u.access || []).map((p) => (
-                                <span key={p} className="access-tag">
-                                  {p}
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-                          <td style={{ textAlign: 'right' }}>
-                            <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', justifyContent: 'flex-end' }}>
-                              {/* Edit Button for ALL users including superadmin */}
-                              <button
-                                type="button"
-                                className="icon-action-btn edit-btn"
-                                title={`Edit ${u.username}`}
-                                onClick={() => handleStartEditUser(u)}
+                      {userList.map((u, idx) => {
+                        const isEven = idx % 2 === 0;
+                        return (
+                          <tr key={u.username || idx} className={isEven ? 'user-row-even' : 'user-row-odd'}>
+                            <td style={{ fontWeight: 'normal' }}>{u.username}</td>
+                            <td style={{ color: '#475569' }}>{u.email || '-'}</td>
+                            <td>
+                              <span
+                                className={`role-pill ${
+                                  u.role === 'super_admin' ? 'role-super' : 'role-admin'
+                                }`}
                               >
-                                <svg
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="1.8"
-                                  width="14"
-                                  height="14"
-                                >
-                                  <path d="M12 20h9" />
-                                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                                </svg>
-                              </button>
-
-                              {/* Delete Button (Protected for super_admin) */}
-                              {u.role === 'super_admin' ? (
-                                <span style={{ fontSize: '9pt', color: '#94a3b8', fontStyle: 'italic', paddingLeft: '2px' }}>
-                                  Protected
-                                </span>
-                              ) : (
+                                {u.role === 'super_admin' ? '★ Super Admin' : u.role}
+                              </span>
+                            </td>
+                            <td>
+                              <div className="perm-pills-row">
+                                {(u.access || []).map((p) => (
+                                  <span key={p} className="access-tag">
+                                    {p}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+                            <td style={{ textAlign: 'center' }}>
+                              <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', justifyContent: 'center' }}>
+                                {/* Edit Button for ALL users including superadmin */}
                                 <button
                                   type="button"
-                                  className="icon-action-btn delete-btn"
-                                  title="Delete User"
-                                  onClick={() => handleDeleteUser(u.username)}
+                                  className="icon-action-btn edit-btn"
+                                  title={`Edit ${u.username}`}
+                                  onClick={() => handleStartEditUser(u)}
                                 >
                                   <svg
                                     viewBox="0 0 24 24"
@@ -1802,15 +1779,41 @@ export default function DashboardPage({
                                     width="14"
                                     height="14"
                                   >
-                                    <polyline points="3 6 5 6 21 6" />
-                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2 2v2" />
+                                    <path d="M12 20h9" />
+                                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
                                   </svg>
                                 </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+
+                                {/* Delete Button (Protected for super_admin) */}
+                                {u.role === 'super_admin' ? (
+                                  <span style={{ fontSize: '9pt', color: '#94a3b8', fontStyle: 'italic', paddingLeft: '2px' }}>
+                                    Protected
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="icon-action-btn delete-btn"
+                                    title="Delete User"
+                                    onClick={() => handleDeleteUser(u.username)}
+                                  >
+                                    <svg
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="1.8"
+                                      width="14"
+                                      height="14"
+                                    >
+                                      <polyline points="3 6 5 6 21 6" />
+                                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2 2v2" />
+                                    </svg>
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
