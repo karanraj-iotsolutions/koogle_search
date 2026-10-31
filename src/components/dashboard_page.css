@@ -257,6 +257,7 @@
   font-family: Calibri, sans-serif !important;
   border-radius: 8px;
   overflow: hidden;
+  border: 1px solid #b3c7df;
 }
 
 .doc-table thead tr {
@@ -271,7 +272,8 @@
   font-size: 11pt !important;
   font-weight: 400 !important;
   white-space: nowrap;
-  border: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.35);
+  border-bottom: 1px solid #b3c7df;
 }
 
 .doc-table th:first-child {
@@ -280,6 +282,7 @@
 
 .doc-table th:last-child {
   border-top-right-radius: 8px;
+  border-right: none;
 }
 
 /* Even Rows (i % 2 === 0): #dbe5f1 (Soft Ice Blue) */
@@ -332,11 +335,12 @@
   font-size: 11pt !important;
   font-weight: 400 !important;
   vertical-align: middle;
-  border-bottom: 1px solid rgba(190, 205, 225, 0.4);
+  border-bottom: 1px solid #c2d3e8;
+  border-right: 1px solid #c2d3e8;
 }
-  font-size: 11pt;
-  font-weight: normal !important;
-  vertical-align: middle;
+
+.doc-table td:last-child {
+  border-right: none;
 }
 
 .col-sl {
