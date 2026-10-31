@@ -18,6 +18,32 @@ import {
 } from '../services/docSearchEngine';
 import PdfHighlightViewer from './PdfHighlightViewer';
 
+/**
+ * Highlights matching query terms with <mark> tags
+ */
+function highlightText(text, query) {
+  if (!text || !query || !query.trim()) return text;
+  const q = query.trim();
+  const str = String(text);
+  const lowerStr = str.toLowerCase();
+  const lowerQ = q.toLowerCase();
+  const matchIndex = lowerStr.indexOf(lowerQ);
+
+  if (matchIndex === -1) return text;
+
+  const before = str.substring(0, matchIndex);
+  const match = str.substring(matchIndex, matchIndex + q.length);
+  const after = str.substring(matchIndex + q.length);
+
+  return (
+    <>
+      {before}
+      <mark className="search-match-mark">{match}</mark>
+      {highlightText(after, query)}
+    </>
+  );
+}
+
 const DEFAULT_DOCUMENTS = [
   {
     id: 'mock-1',
@@ -932,16 +958,20 @@ export default function DashboardPage({
                 ) : (
                   searchResults.map((item, idx) => {
                     const doc = item.doc;
+                    const isMatched = !!searchQuery.trim();
                     return (
-                      <tr key={doc.id || idx}>
+                      <tr
+                        key={doc.id || idx}
+                        className={isMatched ? 'search-matched-row' : ''}
+                      >
                         <td className="col-sl">{idx + 1}</td>
-                        <td className="col-date">{doc.date}</td>
-                        <td className="col-issuer">{doc.issuer}</td>
+                        <td className="col-date">{highlightText(doc.date, searchQuery)}</td>
+                        <td className="col-issuer">{highlightText(doc.issuer, searchQuery)}</td>
                         <td className="col-circular">
-                          <span className="circular-pill">{doc.circularNo}</span>
+                          <span className="circular-pill">{highlightText(doc.circularNo, searchQuery)}</span>
                         </td>
                         <td className="col-subject">
-                          <div style={{ fontWeight: 'normal' }}>{doc.subject}</div>
+                          <div style={{ fontWeight: 'normal' }}>{highlightText(doc.subject, searchQuery)}</div>
                           {item.isContentMatch && item.snippet && (
                             <div
                               className="content-match-snippet"
@@ -949,11 +979,11 @@ export default function DashboardPage({
                               title={`Matched inside file (Page ${item.pageNum}) - Click to open and highlight`}
                             >
                               <span className="match-tag">📄 In-file match (Pg {item.pageNum}):</span>
-                              <span className="match-snippet-text">{item.snippet}</span>
+                              <span className="match-snippet-text">{highlightText(item.snippet, searchQuery)}</span>
                             </div>
                           )}
                         </td>
-                        <td className="col-remarks">{doc.remarks}</td>
+                        <td className="col-remarks">{highlightText(doc.remarks, searchQuery)}</td>
                         <td className="col-actions">
                           <div className="doc-action-group">
                             {/* File Pill */}
@@ -975,9 +1005,12 @@ export default function DashboardPage({
                                 <polyline points="14 2 14 8 20 8" />
                               </svg>
                               <span className="file-name-text">
-                                {(doc.fileName || 'file.pdf').length > 10
-                                  ? (doc.fileName || 'file.pdf').substring(0, 9) + '...'
-                                  : doc.fileName}
+                                {highlightText(
+                                  (doc.fileName || 'file.pdf').length > 15
+                                    ? (doc.fileName || 'file.pdf').substring(0, 14) + '...'
+                                    : doc.fileName,
+                                  searchQuery
+                                )}
                               </span>
                             </span>
 

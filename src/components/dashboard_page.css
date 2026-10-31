@@ -276,6 +276,45 @@
   background-color: #fafafa;
 }
 
+/* =========================================
+   Matching Row Highlight with Royal Blue Outline
+   ========================================= */
+.doc-table tbody tr.search-matched-row {
+  background-color: #f0f7ff !important;
+  transition: all 0.2s ease;
+}
+
+.doc-table tbody tr.search-matched-row td {
+  background-color: #f0f7ff !important;
+  border-top: 2px solid #2563eb !important;
+  border-bottom: 2px solid #2563eb !important;
+}
+
+.doc-table tbody tr.search-matched-row td:first-child {
+  border-left: 2px solid #2563eb !important;
+  border-top-left-radius: 8px !important;
+  border-bottom-left-radius: 8px !important;
+}
+
+.doc-table tbody tr.search-matched-row td:last-child {
+  border-right: 2px solid #2563eb !important;
+  border-top-right-radius: 8px !important;
+  border-bottom-right-radius: 8px !important;
+}
+
+.doc-table tbody tr.search-matched-row:hover td {
+  background-color: #e0f2fe !important;
+}
+
+/* In-Cell Keyword Highlight Tag */
+.search-match-mark {
+  background-color: #fef08a !important;
+  color: #854d0e !important;
+  padding: 1px 4px !important;
+  border-radius: 3px !important;
+  font-weight: 600 !important;
+}
+
 .doc-table td {
   padding: 16px 14px;
   color: #334155;
